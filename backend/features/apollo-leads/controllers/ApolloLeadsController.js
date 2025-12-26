@@ -203,6 +203,23 @@ class ApolloLeadsController {
       });
     }
   }
+
+  /**
+   * Search employees from database cache (employees_cache table)
+   * Falls back to Apollo API if no results found in database
+   */
+  async searchEmployeesFromDb(req, res) {
+    try {
+      const result = await ApolloLeadsService.searchEmployeesFromDb(req.body);
+      res.json(result);
+    } catch (error) {
+      console.error('Search employees from DB error:', error);
+      res.status(error.message.includes('required') ? 400 : 500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
 }
 
 module.exports = new ApolloLeadsController();

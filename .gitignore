@@ -43,3 +43,19 @@ coverage/
 *.tmp
 *.temp
 .cache/
+
+# Local development files (not for production)
+server.js
+package.json
+package-lock.json
+
+# Documentation files
+*.md
+
+# Test files
+**/*test*.js
+**/*test*.ts
+**/*spec*.js
+**/*spec*.ts
+test/
+tests/

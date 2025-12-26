@@ -1,4 +1,6 @@
 const axios = require('axios');
+const path = require('path');
+const { spawn, execSync } = require('child_process');
 const { pool } = require('../../../shared/database/connection');
 
 class ApolloLeadsService {
@@ -282,6 +284,171 @@ class ApolloLeadsService {
       created_at: new Date().toISOString()
     }));
   }
+
+  /**
+   * Helper function to call Python Apollo service (like pluto_campaigns)
+   * Falls back to API endpoint if Python script is not available
+   */
+  _callApolloService(method, params = {}) {
+    return new Promise((resolve, reject) => {
+      // Try to find Python script in sts-service (if available)
+      const possibleScriptPaths = [
+        path.join(__dirname, '../../../../sts-service/scripts/apollo_service.py'),
+        path.join(__dirname, '../../../../pluto_campains/pluto_v8/sts-service/scripts/apollo_service.py'),
+        path.join(__dirname, '../../../../pluto_v8/sts-service/scripts/apollo_service.py')
+      ];
+      
+      let scriptPath = null;
+      for (const possiblePath of possibleScriptPaths) {
+        try {
+          const fs = require('fs');
+          if (fs.existsSync(possiblePath)) {
+            scriptPath = possiblePath;
+            break;
+          }
+        } catch (e) {
+          // Continue to next path
+        }
+      }
+      
+      // If Python script not found, reject to trigger fallback
+      if (!scriptPath) {
+        reject(new Error('Python script not found - will use API endpoint'));
+        return;
+      }
+      
+      // Find Python executable - try python3, python, then py (Windows)
+      let pythonExec = null;
+      const pythonExecs = ['python3', 'python', 'py'];
+      
+      for (const exec of pythonExecs) {
+        try {
+          execSync(`${exec} --version`, { stdio: 'ignore' });
+          pythonExec = exec;
+          break;
+        } catch (e) {
+          // Try next executable
+        }
+      }
+      
+      // If no Python executable found, reject to trigger fallback
+      if (!pythonExec) {
+        reject(new Error('Python not found - will use API endpoint'));
+        return;
+      }
+      
+      console.log(`[Apollo Leads] 🐍 Using Python executable: ${pythonExec}`);
+      console.log(`[Apollo Leads] 📜 Using script: ${scriptPath}`);
+      const pythonProcess = spawn(pythonExec, [scriptPath, method, JSON.stringify(params)]);
+      
+      let output = '';
+      let error = '';
+      
+      // Handle spawn errors
+      pythonProcess.on('error', (spawnError) => {
+        reject(new Error(`Python process error: ${spawnError.message}`));
+      });
+      
+      pythonProcess.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+      
+      pythonProcess.stderr.on('data', (data) => {
+        const errorText = data.toString();
+        error += errorText;
+        console.log('[Apollo Leads] [Python]', errorText.trim());
+      });
+      
+      pythonProcess.on('close', (code) => {
+        if (code === 0) {
+          try {
+            // Extract JSON from output
+            let jsonString = output.trim();
+            
+            // Find the first '{' or '[' to identify where JSON starts
+            const firstBrace = jsonString.indexOf('{');
+            const firstBracket = jsonString.indexOf('[');
+            let jsonStart = -1;
+            let startChar = '';
+            
+            if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+              jsonStart = firstBrace;
+              startChar = '{';
+            } else if (firstBracket !== -1) {
+              jsonStart = firstBracket;
+              startChar = '[';
+            }
+            
+            if (jsonStart > 0) {
+              jsonString = jsonString.substring(jsonStart);
+            }
+            
+            // Find matching closing bracket/brace
+            let depth = 0;
+            let jsonEnd = -1;
+            const endChar = startChar === '{' ? '}' : ']';
+            
+            for (let i = 0; i < jsonString.length; i++) {
+              if (jsonString[i] === startChar) {
+                depth++;
+              } else if (jsonString[i] === endChar) {
+                depth--;
+                if (depth === 0) {
+                  jsonEnd = i;
+                  break;
+                }
+              }
+            }
+            
+            if (jsonEnd !== -1) {
+              jsonString = jsonString.substring(0, jsonEnd + 1);
+            }
+            
+            const result = JSON.parse(jsonString);
+            
+            // For search_people_direct, return the full result object
+            if (result.success !== undefined && result.employees) {
+              resolve(result);
+            } else if (result.companies) {
+              resolve(result.companies);
+            } else if (result.leads) {
+              resolve(result.leads);
+            } else if (result.employees && !result.success) {
+              resolve(result.employees);
+            } else if (Array.isArray(result)) {
+              resolve(result);
+            } else {
+              resolve(result);
+            }
+          } catch (e) {
+            console.error('[Apollo Leads] JSON Parse Error:', e.message);
+            console.error('[Apollo Leads] Output (first 500 chars):', output.substring(0, 500));
+            reject(new Error('Failed to parse Python output: ' + e.message));
+          }
+        } else {
+          reject(new Error('Python process failed: ' + error));
+        }
+      });
+    });
+  }
+
+  /**
+   * Search employees from database cache (employees_cache table)
+   * Falls back to Apollo API if no results found in database
+   * 
+   * @param {Object} searchParams - Search parameters
+   * @param {number} page - Page number (default: 1)
+   * @param {number} per_page - Results per page (default: 100)
+   * @returns {Promise<Object>} { success, employees, count }
+   * 
+   * NOTE: This method has been moved to ApolloCacheService.js
+   * This is kept for backward compatibility
+   */
+  async searchEmployeesFromDb(searchParams) {
+    const { searchEmployeesFromDb } = require('./ApolloCacheService');
+    return searchEmployeesFromDb(searchParams);
+  }
+  
 }
 
 module.exports = new ApolloLeadsService();
