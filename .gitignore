@@ -47,7 +47,7 @@ coverage/
 # Local development files (not for production)
 server.js
 package.json
-package-lock.json
+# Note: package-lock.json should be committed for CI/CD to work
 
 # Documentation files
 *.md
