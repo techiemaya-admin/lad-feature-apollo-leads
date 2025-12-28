@@ -32,8 +32,9 @@
  * 3. Controller function: Business logic
  * 
  * INTEGRATION:
- * - Uses existing Apollo service from sts-service/scripts/apollo_service.py
- * - Maintains backward compatibility with existing Apollo implementation
+ * - Uses Apollo service script via LAD_SCRIPTS_PATH environment variable
+ * - Script location: backend/shared/services/apollo_service.py (when merged to LAD)
+ * - For local dev: Set LAD_SCRIPTS_PATH to scripts directory (symlink setup)
  * - Adds proper access control and billing on top of existing functionality
  * 
  * SECURITY:
@@ -51,6 +52,7 @@
 
 const express = require('express');
 const router = express.Router();
+const logger = require('../../core/utils/logger');
 
 // Try to load middleware - use correct path from routes/index.js
 // From: backend/features/apollo-leads/routes/index.js
@@ -61,7 +63,7 @@ try {
   const featureGuard = require('../../../shared/middleware/feature_guard');
   requireFeature = featureGuard.requireFeature;
 } catch (error) {
-  console.warn('[Apollo Routes] Feature guard not found, creating stub:', error.message);
+  logger.warn('[Apollo Routes] Feature guard not found, creating stub', { error: error.message });
   requireFeature = (featureName) => (req, res, next) => next(); // Allow all in dev
 }
 
@@ -69,7 +71,7 @@ try {
   const creditGuard = require('../../../shared/middleware/credit_guard');
   requireCredits = creditGuard.requireCredits;
 } catch (error) {
-  console.warn('[Apollo Routes] Credit guard not found, creating stub:', error.message);
+  logger.warn('[Apollo Routes] Credit guard not found, creating stub', { error: error.message });
   requireCredits = (type, amount) => (req, res, next) => next(); // Skip in dev
 }
 

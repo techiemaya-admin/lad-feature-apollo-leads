@@ -2,14 +2,16 @@ const axios = require('axios');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
 const { pool } = require('../../../shared/database/connection');
+const logger = require('../core/utils/logger');
 
 class ApolloLeadsService {
   constructor() {
     this.apiKey = process.env.APOLLO_API_KEY || process.env.APOLLO_IO_API_KEY;
-    this.baseURL = 'https://api.apollo.io/v1';
+    // LAD Architecture: Use environment variable for API base URL (allows override for testing/staging)
+    this.baseURL = process.env.APOLLO_API_BASE_URL || 'https://api.apollo.io/v1';
     
     if (!this.apiKey) {
-      console.warn('⚠️ Apollo API key not configured');
+      logger.warn('[Apollo Leads] Apollo API key not configured');
     }
   }
 
@@ -71,7 +73,7 @@ class ApolloLeadsService {
 
       return this.formatCompanies(companies);
     } catch (error) {
-      console.error('Apollo API error:', error.response?.data || error.message);
+      logger.error('[Apollo Leads] Apollo API error', { error: error.response?.data || error.message });
       throw new Error(`Apollo search failed: ${error.message}`);
     }
   }
@@ -91,7 +93,7 @@ class ApolloLeadsService {
 
       return this.formatCompany(response.data.organization);
     } catch (error) {
-      console.error('Apollo get company error:', error);
+      logger.error('[Apollo Leads] Get company error', { error: error.message, stack: error.stack });
       throw new Error(`Failed to get company: ${error.message}`);
     }
   }
@@ -123,7 +125,7 @@ class ApolloLeadsService {
 
       return this.formatLeads(response.data.people || []);
     } catch (error) {
-      console.error('Apollo get leads error:', error);
+      logger.error('[Apollo Leads] Get leads error', { error: error.message, stack: error.stack });
       throw new Error(`Failed to get leads: ${error.message}`);
     }
   }
@@ -148,7 +150,7 @@ class ApolloLeadsService {
       const person = response.data?.matches?.[0];
       return person?.email || null;
     } catch (error) {
-      console.error('Apollo reveal email error:', error);
+      logger.error('[Apollo Leads] Reveal email error', { error: error.message, stack: error.stack });
       throw new Error(`Email reveal failed: ${error.message}`);
     }
   }
@@ -173,7 +175,7 @@ class ApolloLeadsService {
       const person = response.data?.matches?.[0];
       return person?.phone_numbers?.[0]?.raw_number || null;
     } catch (error) {
-      console.error('Apollo reveal phone error:', error);
+      logger.error('[Apollo Leads] Reveal phone error', { error: error.message, stack: error.stack });
       throw new Error(`Phone reveal failed: ${error.message}`);
     }
   }
@@ -192,31 +194,37 @@ class ApolloLeadsService {
         searchData.results
       ]);
     } catch (error) {
-      console.error('Save search history error:', error);
+      logger.error('[Apollo Leads] Save search history error', { error: error.message, stack: error.stack });
       // Don't throw - this is not critical
     }
   }
 
-  async getSearchHistory(userId, options = {}) {
+  async getSearchHistory(userId, options = {}, req = null) {
     const { limit = 50, page = 1 } = options;
     const offset = (page - 1) * limit;
 
     try {
+      // LAD Architecture: Extract tenant context
+      const tenantId = req?.user?.tenant_id || req?.tenant?.id || req?.headers?.['x-tenant-id'];
+      
+      // Note: If apollo_search_history table has tenant_id column, add: AND tenant_id = $X
+      // For now, filtering by user_id (users should be tenant-scoped)
       const query = `
         SELECT id, search_params, results_count, created_at
         FROM apollo_search_history
-        WHERE user_id = $1
+        WHERE user_id = $1${tenantId ? ' AND tenant_id = $4' : ''}
         ORDER BY created_at DESC
         LIMIT $2 OFFSET $3
       `;
       
-      const result = await pool.query(query, [userId, limit, offset]);
+      const params = tenantId ? [userId, limit, offset, tenantId] : [userId, limit, offset];
+      const result = await pool.query(query, params);
       return result.rows.map(row => ({
         ...row,
         search_params: JSON.parse(row.search_params)
       }));
     } catch (error) {
-      console.error('Get search history error:', error);
+      logger.error('[Apollo Leads] Get search history error', { error: error.message, stack: error.stack });
       return [];
     }
   }
@@ -230,7 +238,7 @@ class ApolloLeadsService {
       
       await pool.query(query, [historyId, userId]);
     } catch (error) {
-      console.error('Delete search history error:', error);
+      logger.error('[Apollo Leads] Delete search history error', { error: error.message, stack: error.stack });
       throw error;
     }
   }
@@ -286,33 +294,49 @@ class ApolloLeadsService {
   }
 
   /**
-   * Helper function to call Python Apollo service (like pluto_campaigns)
+   * Helper function to call Python Apollo service
+   * Uses LAD_SCRIPTS_PATH environment variable (LAD architecture compliant)
    * Falls back to API endpoint if Python script is not available
    */
   _callApolloService(method, params = {}) {
     return new Promise((resolve, reject) => {
-      // Try to find Python script in sts-service (if available)
-      const possibleScriptPaths = [
-        path.join(__dirname, '../../../../sts-service/scripts/apollo_service.py'),
-        path.join(__dirname, '../../../../pluto_campains/pluto_v8/sts-service/scripts/apollo_service.py'),
-        path.join(__dirname, '../../../../pluto_v8/sts-service/scripts/apollo_service.py')
-      ];
-      
+      // LAD RULE: Use environment variable, NEVER guess paths
+      // Path guessing is FORBIDDEN in LAD architecture
       let scriptPath = null;
-      for (const possiblePath of possibleScriptPaths) {
-        try {
-          const fs = require('fs');
-          if (fs.existsSync(possiblePath)) {
-            scriptPath = possiblePath;
-            break;
-          }
-        } catch (e) {
-          // Continue to next path
+      const fs = require('fs');
+      
+      // Priority 1: LAD_SCRIPTS_PATH (for local development with symlink)
+      if (process.env.LAD_SCRIPTS_PATH) {
+        const candidatePath = path.join(process.env.LAD_SCRIPTS_PATH, 'apollo_service.py');
+        if (fs.existsSync(candidatePath)) {
+          scriptPath = candidatePath;
+          logger.debug('[Apollo Leads] Using script from LAD_SCRIPTS_PATH', { path: scriptPath });
+        }
+      }
+      
+      // Priority 2: APOLLO_SERVICE_SCRIPT_PATH (direct path override)
+      if (!scriptPath && process.env.APOLLO_SERVICE_SCRIPT_PATH) {
+        if (fs.existsSync(process.env.APOLLO_SERVICE_SCRIPT_PATH)) {
+          scriptPath = process.env.APOLLO_SERVICE_SCRIPT_PATH;
+          logger.debug('[Apollo Leads] Using script from APOLLO_SERVICE_SCRIPT_PATH', { path: scriptPath });
+        }
+      }
+      
+      // Priority 3: Standard LAD location (when merged to LAD)
+      if (!scriptPath) {
+        // Try standard LAD location: backend/shared/services/apollo_service.py
+        // This is relative to where the service is running (LAD backend root)
+        const standardPath = path.join(process.cwd(), 'backend', 'shared', 'services', 'apollo_service.py');
+        if (fs.existsSync(standardPath)) {
+          scriptPath = standardPath;
+          logger.debug('[Apollo Leads] Using script from standard LAD location', { path: scriptPath });
         }
       }
       
       // If Python script not found, reject to trigger fallback
       if (!scriptPath) {
+        logger.warn('[Apollo Leads] Python script not found. Set LAD_SCRIPTS_PATH or APOLLO_SERVICE_SCRIPT_PATH env var.');
+        logger.debug('[Apollo Leads] For local dev: cd LAD/backend && ln -s ./core/scripts ./scripts && export LAD_SCRIPTS_PATH=$(pwd)/scripts');
         reject(new Error('Python script not found - will use API endpoint'));
         return;
       }
@@ -337,8 +361,7 @@ class ApolloLeadsService {
         return;
       }
       
-      console.log(`[Apollo Leads] 🐍 Using Python executable: ${pythonExec}`);
-      console.log(`[Apollo Leads] 📜 Using script: ${scriptPath}`);
+      logger.debug('[Apollo Leads] Using Python executable', { executable: pythonExec, script: scriptPath });
       const pythonProcess = spawn(pythonExec, [scriptPath, method, JSON.stringify(params)]);
       
       let output = '';
@@ -356,7 +379,7 @@ class ApolloLeadsService {
       pythonProcess.stderr.on('data', (data) => {
         const errorText = data.toString();
         error += errorText;
-        console.log('[Apollo Leads] [Python]', errorText.trim());
+        logger.debug('[Apollo Leads] [Python]', { output: errorText.trim() });
       });
       
       pythonProcess.on('close', (code) => {
@@ -421,8 +444,7 @@ class ApolloLeadsService {
               resolve(result);
             }
           } catch (e) {
-            console.error('[Apollo Leads] JSON Parse Error:', e.message);
-            console.error('[Apollo Leads] Output (first 500 chars):', output.substring(0, 500));
+            logger.error('[Apollo Leads] JSON Parse Error', { error: e.message, output: output.substring(0, 500) });
             reject(new Error('Failed to parse Python output: ' + e.message));
           }
         } else {

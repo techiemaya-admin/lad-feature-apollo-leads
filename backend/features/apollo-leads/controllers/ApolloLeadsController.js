@@ -1,8 +1,23 @@
 const ApolloLeadsService = require('../services/ApolloLeadsService');
+const logger = require('../../../core/utils/logger');
+
+/**
+ * Helper to validate tenant context (standalone function to avoid 'this' binding issues)
+ */
+function validateTenant(req) {
+  const tenantId = req.user?.tenant_id || req.tenant?.id || req.headers?.['x-tenant-id'];
+  if (!tenantId && process.env.NODE_ENV === 'production') {
+    throw new Error('Tenant context required');
+  }
+  return tenantId;
+}
 
 class ApolloLeadsController {
+
   async searchCompanies(req, res) {
     try {
+      // LAD Architecture: Validate tenant context
+      validateTenant(req);
       const {
         keywords,
         industry,
@@ -37,7 +52,10 @@ class ApolloLeadsController {
         }
       });
     } catch (error) {
-      console.error('Apollo search error:', error);
+      logger.error('[Apollo Leads Controller] Apollo search error', {
+        error: error.message,
+        stack: error.stack
+      });
       res.status(500).json({
         error: 'Search failed',
         message: error.message
@@ -47,6 +65,9 @@ class ApolloLeadsController {
 
   async bulkSearchCompanies(req, res) {
     try {
+      // LAD Architecture: Validate tenant context
+      validateTenant(req);
+      
       const { searches } = req.body;
       
       if (!Array.isArray(searches)) {
@@ -66,7 +87,10 @@ class ApolloLeadsController {
         total_searches: searches.length
       });
     } catch (error) {
-      console.error('Apollo bulk search error:', error);
+      logger.error('[Apollo Leads Controller] Apollo bulk search error', {
+        error: error.message,
+        stack: error.stack
+      });
       res.status(500).json({
         error: 'Bulk search failed',
         message: error.message
@@ -76,6 +100,9 @@ class ApolloLeadsController {
 
   async getCompanyDetails(req, res) {
     try {
+      // LAD Architecture: Validate tenant context
+      validateTenant(req);
+      
       const { id } = req.params;
       const company = await ApolloLeadsService.getCompanyById(id);
       
@@ -91,7 +118,10 @@ class ApolloLeadsController {
         data: company
       });
     } catch (error) {
-      console.error('Get company details error:', error);
+      logger.error('[Apollo Leads Controller] Get company details error', {
+        error: error.message,
+        stack: error.stack
+      });
       res.status(500).json({
         error: 'Failed to get company details',
         message: error.message
@@ -101,6 +131,9 @@ class ApolloLeadsController {
 
   async getCompanyLeads(req, res) {
     try {
+      // LAD Architecture: Validate tenant context
+      validateTenant(req);
+      
       const { id } = req.params;
       const { limit = 25, page = 1, title_filter } = req.query;
 
@@ -115,7 +148,10 @@ class ApolloLeadsController {
         data: leads
       });
     } catch (error) {
-      console.error('Get company leads error:', error);
+      logger.error('[Apollo Leads Controller] Get company leads error', {
+        error: error.message,
+        stack: error.stack
+      });
       res.status(500).json({
         error: 'Failed to get company leads',
         message: error.message
@@ -125,17 +161,43 @@ class ApolloLeadsController {
 
   async revealEmail(req, res) {
     try {
-      const { id } = req.params;
-      const email = await ApolloLeadsService.revealEmail(id);
+      // LAD Architecture: Validate tenant context
+      validateTenant(req);
+      
+      // Support both GET /leads/:id/email and POST /reveal-email
+      const personId = req.params.id || req.body.person_id;
+      const employeeName = req.body.employee_name || null;
+      
+      if (!personId) {
+        return res.status(400).json({
+          success: false,
+          error: 'person_id is required'
+        });
+      }
+      
+      const result = await ApolloLeadsService.revealEmail(personId, employeeName, req);
+      
+      if (result.error) {
+        return res.json({
+          success: false,
+          error: result.error,
+          credits_used: result.credits_used
+        });
+      }
       
       res.json({
         success: true,
-        email,
-        credits_used: 1
+        email: result.email,
+        from_cache: result.from_cache,
+        credits_used: result.credits_used
       });
     } catch (error) {
-      console.error('Reveal email error:', error);
+      logger.error('[Apollo Leads Controller] Reveal email error', {
+        error: error.message,
+        stack: error.stack
+      });
       res.status(500).json({
+        success: false,
         error: 'Email reveal failed',
         message: error.message
       });
@@ -144,17 +206,43 @@ class ApolloLeadsController {
 
   async revealPhone(req, res) {
     try {
-      const { id } = req.params;
-      const phone = await ApolloLeadsService.revealPhone(id);
+      // LAD Architecture: Validate tenant context
+      validateTenant(req);
+      
+      // Support both GET /leads/:id/phone and POST /reveal-phone
+      const personId = req.params.id || req.body.person_id;
+      const employeeName = req.body.employee_name || null;
+      
+      if (!personId) {
+        return res.status(400).json({
+          success: false,
+          error: 'person_id is required'
+        });
+      }
+      
+      const result = await ApolloLeadsService.revealPhone(personId, employeeName, req);
+      
+      if (result.error) {
+        return res.json({
+          success: false,
+          error: result.error,
+          credits_used: result.credits_used
+        });
+      }
       
       res.json({
         success: true,
-        phone,
-        credits_used: 9
+        phone: result.phone,
+        from_cache: result.from_cache,
+        credits_used: result.credits_used
       });
     } catch (error) {
-      console.error('Reveal phone error:', error);
+      logger.error('[Apollo Leads Controller] Reveal phone error', {
+        error: error.message,
+        stack: error.stack
+      });
       res.status(500).json({
+        success: false,
         error: 'Phone reveal failed',
         message: error.message
       });
@@ -163,20 +251,26 @@ class ApolloLeadsController {
 
   async getSearchHistory(req, res) {
     try {
+      // LAD Architecture: Validate tenant context
+      validateTenant(req);
+      
       const userId = req.user?.id || 'demo-user';
       const { limit = 50, page = 1 } = req.query;
 
       const history = await ApolloLeadsService.getSearchHistory(userId, {
         limit: parseInt(limit),
         page: parseInt(page)
-      });
+      }, req);
 
       res.json({
         success: true,
         data: history
       });
     } catch (error) {
-      console.error('Get search history error:', error);
+      logger.error('[Apollo Leads Controller] Get search history error', {
+        error: error.message,
+        stack: error.stack
+      });
       res.status(500).json({
         error: 'Failed to get search history',
         message: error.message
@@ -186,6 +280,9 @@ class ApolloLeadsController {
 
   async deleteSearchHistory(req, res) {
     try {
+      // LAD Architecture: Validate tenant context
+      validateTenant(req);
+      
       const { id } = req.params;
       const userId = req.user?.id || 'demo-user';
 
@@ -196,7 +293,10 @@ class ApolloLeadsController {
         message: 'Search history deleted'
       });
     } catch (error) {
-      console.error('Delete search history error:', error);
+      logger.error('[Apollo Leads Controller] Delete search history error', {
+        error: error.message,
+        stack: error.stack
+      });
       res.status(500).json({
         error: 'Failed to delete search history',
         message: error.message
@@ -207,13 +307,27 @@ class ApolloLeadsController {
   /**
    * Search employees from database cache (employees_cache table)
    * Falls back to Apollo API if no results found in database
+   * LAD Architecture: Enforces tenant context
    */
   async searchEmployeesFromDb(req, res) {
     try {
-      const result = await ApolloLeadsService.searchEmployeesFromDb(req.body);
+      // LAD Architecture: Validate tenant context
+      const tenantId = req.user?.tenant_id || req.tenant?.id || req.headers?.['x-tenant-id'];
+      if (!tenantId && process.env.NODE_ENV === 'production') {
+        return res.status(400).json({
+          success: false,
+          error: 'Tenant context required'
+        });
+      }
+      
+      // Pass req for schema and tenant context
+      const result = await ApolloLeadsService.searchEmployeesFromDb(req.body, req);
       res.json(result);
     } catch (error) {
-      console.error('Search employees from DB error:', error);
+      logger.error('[Apollo Leads Controller] Search employees from DB error', {
+        error: error.message,
+        stack: error.stack
+      });
       res.status(error.message.includes('required') ? 400 : 500).json({
         success: false,
         error: error.message

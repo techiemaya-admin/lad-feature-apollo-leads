@@ -1,36 +1,51 @@
 /**
  * Apollo Cache Save Service
  * Handles saving Apollo results to database cache
+ * LAD Architecture Compliant
  */
 
 const { pool } = require('../../../shared/database/connection');
+const { getSchema } = require('../core/utils/schemaHelper');
+const logger = require('../core/utils/logger');
 
 /**
  * Save Apollo employees to database cache
+ * @param {Array} employees - Array of employee objects
+ * @param {Object} req - Express request object (for tenant context)
  */
-async function saveEmployeesToCache(employees) {
+async function saveEmployeesToCache(employees, req = null) {
   let client;
   let savedCount = 0;
   let updatedCount = 0;
   let errorCount = 0;
   
   try {
-    client = await pool.connect();
+    // LAD Architecture: Extract tenant context from request
+    const tenantId = req?.user?.tenant_id || req?.tenant?.id || req?.headers?.['x-tenant-id'];
+    if (!tenantId && process.env.NODE_ENV === 'production') {
+      throw new Error('Tenant context required');
+    }
+    // Fallback for development only
+    const effectiveTenantId = tenantId || process.env.DEV_TENANT_ID || '00000000-0000-0000-0000-000000000001';
     
-    // Get default tenant_id (use the default tenant from environment or a default UUID)
-    const defaultTenantId = process.env.DEV_TENANT_ID || '00000000-0000-0000-0000-000000000001';
+    // LAD Architecture: Get dynamic schema (no hardcoded lad_dev)
+    const schema = getSchema(req);
+    
+    client = await pool.connect();
     
     for (const emp of employees) {
       try {
         const apolloPersonId = String(emp.id || emp.person_id || '');
         if (!apolloPersonId || apolloPersonId === '') {
-          console.warn(`[Apollo Cache Save] ⚠️  Skipping employee with no apollo_person_id: ${emp.name}`);
+          logger.warn('[Apollo Cache Save] Skipping employee with no apollo_person_id', { name: emp.name });
           errorCount++;
           continue;
         }
         
+        // LAD Architecture: Use dynamic schema and tenant_id from request
+        // Note: Schema variable must be used in template literal, not string interpolation in ON CONFLICT
         const result = await client.query(`
-          INSERT INTO lad_dev.employees_cache (
+          INSERT INTO ${schema}.employees_cache (
             tenant_id, apollo_person_id, employee_name, employee_title, employee_email,
             employee_phone, employee_linkedin_url, employee_photo_url,
             employee_headline, employee_city, employee_state, employee_country,
@@ -39,20 +54,20 @@ async function saveEmployeesToCache(employees) {
           ON CONFLICT (tenant_id, company_id, apollo_person_id) DO UPDATE SET
             employee_name = EXCLUDED.employee_name,
             employee_title = EXCLUDED.employee_title,
-            employee_email = COALESCE(EXCLUDED.employee_email, lad_dev.employees_cache.employee_email),
-            employee_phone = COALESCE(EXCLUDED.employee_phone, lad_dev.employees_cache.employee_phone),
-            employee_linkedin_url = COALESCE(EXCLUDED.employee_linkedin_url, lad_dev.employees_cache.employee_linkedin_url),
-            employee_photo_url = COALESCE(EXCLUDED.employee_photo_url, lad_dev.employees_cache.employee_photo_url),
-            employee_headline = COALESCE(EXCLUDED.employee_headline, lad_dev.employees_cache.employee_headline),
-            employee_city = COALESCE(EXCLUDED.employee_city, lad_dev.employees_cache.employee_city),
-            employee_state = COALESCE(EXCLUDED.employee_state, lad_dev.employees_cache.employee_state),
-            employee_country = COALESCE(EXCLUDED.employee_country, lad_dev.employees_cache.employee_country),
-            company_name = COALESCE(EXCLUDED.company_name, lad_dev.employees_cache.company_name),
-            company_domain = COALESCE(EXCLUDED.company_domain, lad_dev.employees_cache.company_domain),
+            employee_email = COALESCE(EXCLUDED.employee_email, ${schema}.employees_cache.employee_email),
+            employee_phone = COALESCE(EXCLUDED.employee_phone, ${schema}.employees_cache.employee_phone),
+            employee_linkedin_url = COALESCE(EXCLUDED.employee_linkedin_url, ${schema}.employees_cache.employee_linkedin_url),
+            employee_photo_url = COALESCE(EXCLUDED.employee_photo_url, ${schema}.employees_cache.employee_photo_url),
+            employee_headline = COALESCE(EXCLUDED.employee_headline, ${schema}.employees_cache.employee_headline),
+            employee_city = COALESCE(EXCLUDED.employee_city, ${schema}.employees_cache.employee_city),
+            employee_state = COALESCE(EXCLUDED.employee_state, ${schema}.employees_cache.employee_state),
+            employee_country = COALESCE(EXCLUDED.employee_country, ${schema}.employees_cache.employee_country),
+            company_name = COALESCE(EXCLUDED.company_name, ${schema}.employees_cache.company_name),
+            company_domain = COALESCE(EXCLUDED.company_domain, ${schema}.employees_cache.company_domain),
             employee_data = EXCLUDED.employee_data,
             updated_at = NOW()
         `, [
-          defaultTenantId,
+          effectiveTenantId,
           apolloPersonId,
           emp.name || null,
           emp.title || null,
@@ -78,20 +93,30 @@ async function saveEmployeesToCache(employees) {
         }
       } catch (saveError) {
         errorCount++;
-        console.warn(`[Apollo Cache Save] ⚠️  Failed to save employee ${emp.id || emp.name}:`, saveError.message);
+        logger.warn('[Apollo Cache Save] Failed to save employee', {
+          id: emp.id || emp.name,
+          error: saveError.message
+        });
         if (saveError.code === '23505') {
           // Unique constraint violation - this is okay, it means the record already exists
-          console.warn(`[Apollo Cache Save]   (Record already exists, skipping)`);
+          logger.debug('[Apollo Cache Save] Record already exists, skipping');
         }
       }
     }
     
-    console.log(`[Apollo Cache Save] ✅ Saved ${savedCount} new, ${updatedCount} updated, ${errorCount} errors out of ${employees.length} employees`);
+    logger.info('[Apollo Cache Save] Save operation completed', {
+      saved: savedCount,
+      updated: updatedCount,
+      errors: errorCount,
+      total: employees.length
+    });
     
     return { savedCount, updatedCount, errorCount };
   } catch (saveError) {
-    console.error('[Apollo Cache Save] ❌ Error saving to cache:', saveError.message);
-    console.error('[Apollo Cache Save] Stack:', saveError.stack);
+    logger.error('[Apollo Cache Save] Error saving to cache', {
+      message: saveError.message,
+      stack: saveError.stack
+    });
     throw saveError;
   } finally {
     if (client) {

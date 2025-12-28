@@ -59,8 +59,7 @@ server.js
 test/
 tests/
 
-# SQL migration files
-ADD_IS_DELETED_COLUMN.sql
+# Migration files (ignore specific ones)
 backend/migrations/002_add_is_deleted_simple.sql
 backend/migrations/002_add_is_deleted_to_employees_cache.sql
 backend/migrations/002_add_is_deleted_to_employees_cache_tenant.sql

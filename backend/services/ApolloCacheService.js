@@ -1,22 +1,24 @@
 /**
  * Apollo Cache Service
  * Handles database cache operations for Apollo leads
+ * LAD Architecture Compliant
  */
 
 const { pool } = require('../../../shared/database/connection');
 const { searchEmployeesFromApollo } = require('./ApolloApiService');
 const { saveEmployeesToCache, formatApolloEmployees } = require('./ApolloCacheSaveService');
+const { getSchema } = require('../core/utils/schemaHelper');
+const logger = require('../core/utils/logger');
 
 /**
  * Search employees from database cache (employees_cache table)
  * Falls back to Apollo API if no results found in database
  * 
  * @param {Object} searchParams - Search parameters
- * @param {number} page - Page number (default: 1)
- * @param {number} per_page - Results per page (default: 100)
+ * @param {Object} req - Express request object (for tenant context and schema)
  * @returns {Promise<Object>} { success, employees, count }
  */
-async function searchEmployeesFromDb(searchParams) {
+async function searchEmployeesFromDb(searchParams, req = null) {
   const {
     organization_locations = [],
     person_titles = [],
@@ -28,17 +30,30 @@ async function searchEmployeesFromDb(searchParams) {
   let client;
   
   try {
-    console.log('\n[Apollo Cache] 👥 EMPLOYEE SEARCH REQUEST RECEIVED');
-    console.log('[Apollo Cache] Request body:', JSON.stringify(searchParams, null, 2));
+    // LAD Architecture: Extract tenant context from request
+    const tenantId = req?.user?.tenant_id || req?.tenant?.id || req?.headers?.['x-tenant-id'];
+    if (!tenantId && process.env.NODE_ENV === 'production') {
+      throw new Error('Tenant context required');
+    }
+    
+    // LAD Architecture: Get dynamic schema (no hardcoded lad_dev)
+    const schema = getSchema(req);
+    
+    logger.info('[Apollo Cache] Employee search request received', {
+      tenantId: tenantId ? tenantId.substring(0, 8) + '...' : 'default',
+      schema
+    });
     
     // Ensure per_page is at least 1
     const limitedPerPage = Math.max(per_page, 1);
     
-    console.log('[Apollo Cache] 📋 Search parameters:');
-    console.log(`   • Person Titles: [${person_titles.join(', ')}]`);
-    console.log(`   • Locations: [${organization_locations.join(', ')}]`);
-    console.log(`   • Industries: [${organization_industries.join(', ')}]`);
-    console.log(`   • Page: ${page}, Per Page: ${limitedPerPage}`);
+    logger.debug('[Apollo Cache] Search parameters', {
+      person_titles,
+      organization_locations,
+      organization_industries,
+      page,
+      per_page: limitedPerPage
+    });
     
     // Require at least one search criteria
     const hasPersonTitles = person_titles && person_titles.length > 0;
@@ -46,15 +61,16 @@ async function searchEmployeesFromDb(searchParams) {
     const hasLocations = organization_locations && organization_locations.length > 0;
     
     if (!hasPersonTitles && !hasIndustries && !hasLocations) {
-      console.log('[Apollo Cache] ❌ ERROR: At least one search criteria is required');
+      logger.warn('[Apollo Cache] No search criteria provided');
       throw new Error('At least one search criteria is required (person_titles, organization_industries, or organization_locations)');
     }
     
     // Get database connection
     client = await pool.connect();
-    console.log('[Apollo Cache] ✅ Database connection established');
+    logger.debug('[Apollo Cache] Database connection established');
     
     // Build query to search employees_cache
+    // LAD Architecture: Use dynamic schema and tenant scoping
     // NOTE: When using SELECT DISTINCT, ORDER BY columns must be in SELECT list (created_at is included)
     let dbQuery = `
       SELECT DISTINCT
@@ -77,12 +93,19 @@ async function searchEmployeesFromDb(searchParams) {
         ec.employee_data->'organization'->>'website' as company_website_url_alt,
         ec.created_at,
         ec.employee_data
-      FROM lad_dev.employees_cache ec
-      WHERE 1=1
+      FROM ${schema}.employees_cache ec
+      WHERE ec.is_deleted = false
     `;
     
     const queryParams = [];
     let paramIndex = 1;
+    
+    // LAD Architecture: CRITICAL - Add tenant scoping to prevent data leakage
+    if (tenantId) {
+      dbQuery += ` AND ec.tenant_id = $${paramIndex}`;
+      queryParams.push(tenantId);
+      paramIndex++;
+    }
     
     // Filter by job titles (case-insensitive, partial match)
     if (person_titles.length > 0) {
@@ -152,19 +175,21 @@ async function searchEmployeesFromDb(searchParams) {
     queryParams.push(limitedPerPage);
     queryParams.push(offset);
     
-    console.log('[Apollo Cache] 🔍 Executing database query...');
+    logger.debug('[Apollo Cache] Executing database query');
     const queryStartTime = Date.now();
     const dbResult = await client.query(dbQuery, queryParams);
     const queryDuration = Date.now() - queryStartTime;
     
-    console.log(`[Apollo Cache] ⏱️  Query executed in ${queryDuration}ms`);
-    console.log(`[Apollo Cache] 📊 Found ${dbResult.rows.length} employees`);
+    logger.info('[Apollo Cache] Query executed', {
+      duration: `${queryDuration}ms`,
+      resultsCount: dbResult.rows.length
+    });
     
     let employees = [];
     
     // STEP 1: If database has results, use them
     if (dbResult.rows.length > 0) {
-      console.log('[Apollo Cache] ✅ STEP 1 COMPLETE: Found employees in database cache');
+      logger.info('[Apollo Cache] Found employees in database cache', { count: dbResult.rows.length });
       employees = dbResult.rows.map(row => {
         let employeeData = {};
         try {
@@ -172,7 +197,7 @@ async function searchEmployeesFromDb(searchParams) {
             (typeof row.employee_data === 'string' ? JSON.parse(row.employee_data) : row.employee_data) 
             : {};
         } catch (e) {
-          console.warn('[Apollo Cache] ⚠️  Error parsing employee_data:', e.message);
+          logger.warn('[Apollo Cache] Error parsing employee_data', { error: e.message });
         }
         
         return {
@@ -198,8 +223,7 @@ async function searchEmployeesFromDb(searchParams) {
       });
     } else {
       // STEP 2: If database has 0 results, call Apollo API
-      console.log('[Apollo Cache] ⚠️  STEP 1 RESULT: No employees found in database cache');
-      console.log('[Apollo Cache] 🔍 STEP 2: Calling Apollo API...');
+      logger.info('[Apollo Cache] No employees found in database cache, calling Apollo API');
       
       client.release();
       
@@ -214,40 +238,48 @@ async function searchEmployeesFromDb(searchParams) {
         
         if (apolloResult && apolloResult.success && apolloResult.employees && apolloResult.employees.length > 0) {
           const apolloEmployees = apolloResult.employees;
-          console.log(`[Apollo Cache] ✅ STEP 2 COMPLETE: Found ${apolloEmployees.length} employees from Apollo API`);
+          logger.info('[Apollo Cache] Found employees from Apollo API', { count: apolloEmployees.length });
           
           // Format Apollo employees
           employees = formatApolloEmployees(apolloEmployees);
           
           // STEP 3: Save Apollo results to database cache for future use
-          console.log('[Apollo Cache] 💾 STEP 3: Saving Apollo results to database cache...');
+          // LAD Architecture: Pass req for tenant context
           try {
-            await saveEmployeesToCache(employees);
-            console.log(`[Apollo Cache] ✅ STEP 3 COMPLETE: Saved employees to cache`);
+            await saveEmployeesToCache(employees, req);
+            logger.info('[Apollo Cache] Saved employees to cache', { count: employees.length });
           } catch (saveError) {
-            console.error('[Apollo Cache] ❌ Error saving to cache:', saveError.message);
+            logger.error('[Apollo Cache] Error saving to cache', { error: saveError.message });
             // Continue - we still return the Apollo results even if cache save fails
           }
           
           // Limit response to requested per_page (we saved all 100 to DB, but return only what was requested)
           if (employees.length > limitedPerPage) {
-            console.log(`[Apollo Cache] 📊 Limiting response to ${limitedPerPage} employees (requested) out of ${employees.length} total from Apollo`);
+            logger.debug('[Apollo Cache] Limiting response', {
+              requested: limitedPerPage,
+              total: employees.length
+            });
             employees = employees.slice(0, limitedPerPage);
           }
         } else {
-          console.warn('[Apollo Cache] ⚠️  Apollo API returned no employees or invalid response');
+          logger.warn('[Apollo Cache] Apollo API returned no employees or invalid response', {
+            hasResult: !!apolloResult,
+            hasSuccess: apolloResult?.success,
+            hasEmployees: !!apolloResult?.employees,
+            employeesLength: apolloResult?.employees?.length || 0
+          });
         }
       } catch (apolloError) {
-        console.error('[Apollo Cache] ❌ Error calling Apollo API:', apolloError.message);
-        if (apolloError.response) {
-          console.error('[Apollo Cache] Response status:', apolloError.response.status);
-          console.error('[Apollo Cache] Response data:', apolloError.response.data);
-        }
+        logger.error('[Apollo Cache] Error calling Apollo API', {
+          message: apolloError.message,
+          status: apolloError.response?.status,
+          stack: apolloError.stack
+        });
         // Continue - return empty array if Apollo fails
       }
     }
     
-    console.log(`[Apollo Cache] ✅ Returning ${employees.length} employees`);
+    logger.info('[Apollo Cache] Returning employees', { count: employees.length });
     
     return {
       success: true,
@@ -256,8 +288,10 @@ async function searchEmployeesFromDb(searchParams) {
     };
     
   } catch (error) {
-    console.error('[Apollo Cache] ❌ Error:', error.message);
-    console.error('[Apollo Cache] Stack:', error.stack);
+    logger.error('[Apollo Cache] Error in searchEmployeesFromDb', {
+      message: error.message,
+      stack: error.stack
+    });
     
     if (client) {
       client.release();

@@ -1,40 +1,58 @@
 /**
  * Apollo API Service
  * Handles Apollo API calls and Python script execution
+ * LAD Architecture Compliant
  */
 
 const axios = require('axios');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
+const logger = require('../core/utils/logger');
 
 /**
- * Helper function to call Python Apollo service (like pluto_campaigns)
+ * Helper function to call Python Apollo service
+ * Uses LAD_SCRIPTS_PATH environment variable (LAD architecture compliant)
  * Falls back to API endpoint if Python script is not available
  */
 function callApolloService(method, params = {}) {
   return new Promise((resolve, reject) => {
-    // Try to find Python script in sts-service (if available)
-    const possibleScriptPaths = [
-      path.join(__dirname, '../../../../sts-service/scripts/apollo_service.py'),
-      path.join(__dirname, '../../../../pluto_campains/pluto_v8/sts-service/scripts/apollo_service.py'),
-      path.join(__dirname, '../../../../pluto_v8/sts-service/scripts/apollo_service.py')
-    ];
-    
+    // LAD RULE: Use environment variable, NEVER guess paths
+    // Path guessing is FORBIDDEN in LAD architecture
     let scriptPath = null;
-    for (const possiblePath of possibleScriptPaths) {
-      try {
-        const fs = require('fs');
-        if (fs.existsSync(possiblePath)) {
-          scriptPath = possiblePath;
-          break;
-        }
-      } catch (e) {
-        // Continue to next path
+    const fs = require('fs');
+    
+    // Priority 1: LAD_SCRIPTS_PATH (for local development with symlink)
+    if (process.env.LAD_SCRIPTS_PATH) {
+      const candidatePath = path.join(process.env.LAD_SCRIPTS_PATH, 'apollo_service.py');
+      if (fs.existsSync(candidatePath)) {
+        scriptPath = candidatePath;
+        logger.debug('[Apollo API] Using script from LAD_SCRIPTS_PATH', { path: scriptPath });
+      }
+    }
+    
+    // Priority 2: APOLLO_SERVICE_SCRIPT_PATH (direct path override)
+    if (!scriptPath && process.env.APOLLO_SERVICE_SCRIPT_PATH) {
+      if (fs.existsSync(process.env.APOLLO_SERVICE_SCRIPT_PATH)) {
+        scriptPath = process.env.APOLLO_SERVICE_SCRIPT_PATH;
+        logger.debug('[Apollo API] Using script from APOLLO_SERVICE_SCRIPT_PATH', { path: scriptPath });
+      }
+    }
+    
+    // Priority 3: Standard LAD location (when merged to LAD)
+    if (!scriptPath) {
+      // Try standard LAD location: backend/shared/services/apollo_service.py
+      // This is relative to where the service is running (LAD backend root)
+      const standardPath = path.join(process.cwd(), 'backend', 'shared', 'services', 'apollo_service.py');
+      if (fs.existsSync(standardPath)) {
+        scriptPath = standardPath;
+        logger.debug('[Apollo API] Using script from standard LAD location', { path: scriptPath });
       }
     }
     
     // If Python script not found, reject to trigger fallback
     if (!scriptPath) {
+      logger.warn('[Apollo API] Python script not found. Set LAD_SCRIPTS_PATH or APOLLO_SERVICE_SCRIPT_PATH env var.');
+      logger.debug('[Apollo API] For local dev: cd LAD/backend && ln -s ./core/scripts ./scripts && export LAD_SCRIPTS_PATH=$(pwd)/scripts');
       reject(new Error('Python script not found - will use API endpoint'));
       return;
     }
@@ -59,8 +77,7 @@ function callApolloService(method, params = {}) {
       return;
     }
     
-    console.log(`[Apollo API] 🐍 Using Python executable: ${pythonExec}`);
-    console.log(`[Apollo API] 📜 Using script: ${scriptPath}`);
+    logger.debug('[Apollo API] Using Python executable', { executable: pythonExec, script: scriptPath });
     const pythonProcess = spawn(pythonExec, [scriptPath, method, JSON.stringify(params)]);
     
     let output = '';
@@ -78,7 +95,7 @@ function callApolloService(method, params = {}) {
     pythonProcess.stderr.on('data', (data) => {
       const errorText = data.toString();
       error += errorText;
-      console.log('[Apollo API] [Python]', errorText.trim());
+      logger.debug('[Apollo API] [Python]', { output: errorText.trim() });
     });
     
     pythonProcess.on('close', (code) => {
@@ -143,8 +160,7 @@ function callApolloService(method, params = {}) {
             resolve(result);
           }
         } catch (e) {
-          console.error('[Apollo API] JSON Parse Error:', e.message);
-          console.error('[Apollo API] Output (first 500 chars):', output.substring(0, 500));
+          logger.error('[Apollo API] JSON Parse Error', { error: e.message, output: output.substring(0, 500) });
           reject(new Error('Failed to parse Python output: ' + e.message));
         }
       } else {
@@ -158,11 +174,15 @@ function callApolloService(method, params = {}) {
  * Call Apollo API via HTTP endpoint
  */
 async function callApolloApi(searchParams) {
+  // LAD Architecture: Use environment variable for backend URL (no hardcoded URLs)
   const PRODUCTION_BACKEND_URL = process.env.BACKEND_URL || 
-                                 process.env.NEXT_PUBLIC_BACKEND_URL || 
-                                 'https://lad-backend-develop-741719885039.us-central1.run.app';
+                                 process.env.NEXT_PUBLIC_BACKEND_URL;
   
-  console.log(`[Apollo API] 🌐 Calling Apollo API via: ${PRODUCTION_BACKEND_URL}/api/apollo-leads/search-employees`);
+  if (!PRODUCTION_BACKEND_URL) {
+    throw new Error('BACKEND_URL or NEXT_PUBLIC_BACKEND_URL environment variable is required');
+  }
+  
+  logger.debug('[Apollo API] Calling Apollo API via production backend', { url: `${PRODUCTION_BACKEND_URL}/api/apollo-leads/search-employees` });
   
   const apolloResponse = await axios.post(
     `${PRODUCTION_BACKEND_URL}/api/apollo-leads/search-employees`,
@@ -192,26 +212,24 @@ async function searchEmployeesFromApollo(searchParams) {
   
   const apolloPerPage = 100; // Always request 100 from Apollo
   
-  console.log('[Apollo API] 🐍 Attempting to call Apollo API...');
-  console.log('[Apollo API] 📋 Search params:', JSON.stringify({
+  logger.info('[Apollo API] Attempting to call Apollo API', {
     organization_locations,
     person_titles,
     organization_industries,
     per_page: apolloPerPage,
     page
-  }, null, 2));
+  });
   
   // Check if Apollo API key is configured
   const apiKey = process.env.APOLLO_API_KEY || process.env.APOLLO_IO_API_KEY;
   if (!apiKey) {
-    console.error('[Apollo API] ❌ Apollo API key not configured!');
-    console.error('[Apollo API] Set APOLLO_API_KEY or APOLLO_IO_API_KEY in .env file');
+    logger.error('[Apollo API] Apollo API key not configured');
     throw new Error('Apollo API key not configured');
   }
-  console.log('[Apollo API] ✅ API key found');
+  logger.debug('[Apollo API] API key found');
   
   try {
-    console.log('[Apollo API] 🐍 Attempting to call Apollo via Python script...');
+    logger.debug('[Apollo API] Attempting to call Apollo via Python script');
     const apolloResult = await callApolloService('search_people_direct', {
       organization_locations: organization_locations,
       person_titles: person_titles,
@@ -219,12 +237,13 @@ async function searchEmployeesFromApollo(searchParams) {
       per_page: apolloPerPage,
       page: page || 1
     });
-    console.log('[Apollo API] ✅ Successfully called Apollo via Python script');
-    console.log('[Apollo API] 📊 Result:', apolloResult?.success ? `Found ${apolloResult?.employees?.length || 0} employees` : 'No result');
+    logger.info('[Apollo API] Successfully called Apollo via Python script', {
+      success: apolloResult?.success,
+      employeesCount: apolloResult?.employees?.length || 0
+    });
     return apolloResult;
   } catch (pythonError) {
-    console.log(`[Apollo API] ⚠️  Python script not available: ${pythonError.message}`);
-    console.log('[Apollo API] 🌐 Falling back to direct Apollo API call...');
+    logger.warn('[Apollo API] Python script not available, falling back to direct API call', { error: pythonError.message });
     
     // Fallback: Call Apollo API directly using axios
     try {
@@ -249,14 +268,28 @@ async function searchEmployeesFromApollo(searchParams) {
         apolloRequestData.organization_industries = organization_industries;
       }
       
-      console.log('[Apollo API] 🌐 Calling Apollo API directly: https://api.apollo.io/v1/mixed_people/search');
-      console.log('[Apollo API] 📋 Request data:', JSON.stringify({
-        ...apolloRequestData,
-        api_key: '***HIDDEN***'
-      }, null, 2));
+      // LAD Architecture: Use environment variable for API base URL
+      // Match Python script: https://api.apollo.io/api/v1 (includes /api/ in path)
+      // Normalize base URL to ensure it has /api/ in the path
+      let apolloBaseUrl = process.env.APOLLO_API_BASE_URL || 'https://api.apollo.io/api/v1';
+      
+      // Fix common issue: if base URL is https://api.apollo.io/v2, convert to https://api.apollo.io/api/v2
+      if (apolloBaseUrl.includes('api.apollo.io') && !apolloBaseUrl.includes('/api/')) {
+        apolloBaseUrl = apolloBaseUrl.replace('api.apollo.io', 'api.apollo.io/api');
+      }
+      
+      const apolloSearchEndpoint = `${apolloBaseUrl}/mixed_people/search`;
+      
+      logger.info('[Apollo API] Calling Apollo API directly', {
+        endpoint: apolloSearchEndpoint,
+        requestData: {
+          ...apolloRequestData,
+          api_key: '***HIDDEN***'
+        }
+      });
       
       const apolloResponse = await axios.post(
-        'https://api.apollo.io/v1/mixed_people/search',
+        apolloSearchEndpoint,
         apolloRequestData,
         {
           headers: {
@@ -267,11 +300,11 @@ async function searchEmployeesFromApollo(searchParams) {
         }
       );
       
-      console.log('[Apollo API] ✅ Apollo API responded with status:', apolloResponse.status);
+      logger.info('[Apollo API] Apollo API responded', { status: apolloResponse.status });
       
       if (apolloResponse.data && apolloResponse.data.people) {
         const people = apolloResponse.data.people;
-        console.log(`[Apollo API] 📊 Found ${people.length} people from Apollo`);
+        logger.info('[Apollo API] Found people from Apollo', { count: people.length });
         
         return {
           success: true,
@@ -279,7 +312,7 @@ async function searchEmployeesFromApollo(searchParams) {
           pagination: apolloResponse.data.pagination || {}
         };
       } else {
-        console.warn('[Apollo API] ⚠️  Apollo API returned unexpected format:', apolloResponse.data);
+        logger.warn('[Apollo API] Apollo API returned unexpected format', { data: apolloResponse.data });
         return {
           success: false,
           employees: [],
@@ -287,11 +320,11 @@ async function searchEmployeesFromApollo(searchParams) {
         };
       }
     } catch (apiError) {
-      console.error('[Apollo API] ❌ Error calling Apollo API directly:', apiError.message);
-      if (apiError.response) {
-        console.error('[Apollo API] Response status:', apiError.response.status);
-        console.error('[Apollo API] Response data:', JSON.stringify(apiError.response.data, null, 2));
-      }
+      logger.error('[Apollo API] Error calling Apollo API directly', {
+        message: apiError.message,
+        status: apiError.response?.status,
+        responseData: apiError.response?.data
+      });
       throw apiError;
     }
   }
