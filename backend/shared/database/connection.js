@@ -17,10 +17,26 @@ try {
   
   // Only create pool if we have database configuration
   // If password is empty, still create pool (for local dev without password)
+  const dbName = process.env.DB_NAME || process.env.POSTGRES_DB || process.env.PGDATABASE;
+  
+  // LAD Architecture: Database name should be set via environment variable
+  // In production, fail if not set. In development, use fallback with warning.
+  const isProduction = process.env.NODE_ENV === 'production';
+  let effectiveDbName = dbName;
+  
+  if (!effectiveDbName) {
+    if (isProduction) {
+      throw new Error('DB_NAME, POSTGRES_DB, or PGDATABASE environment variable must be set in production');
+    } else {
+      logger.warn('[Apollo Leads DB] Database name not set, using fallback. Set DB_NAME in .env for proper configuration.');
+      effectiveDbName = 'lad_dev'; // Development fallback only
+    }
+  }
+  
   const dbConfig = {
     host: process.env.DB_HOST || process.env.POSTGRES_HOST || process.env.PGHOST || 'localhost',
     port: parseInt(process.env.DB_PORT || process.env.POSTGRES_PORT || process.env.PGPORT || '5432', 10),
-    database: process.env.DB_NAME || process.env.POSTGRES_DB || process.env.PGDATABASE || 'lad_dev',
+    database: effectiveDbName,
     user: process.env.DB_USER || process.env.POSTGRES_USER || process.env.PGUSER || 'postgres',
     password: dbPassword, // Can be empty string for local dev
     ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,

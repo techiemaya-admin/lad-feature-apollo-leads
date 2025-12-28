@@ -6,6 +6,7 @@
 
 const { pool } = require('../../../shared/database/connection');
 const { getSchema } = require('../core/utils/schemaHelper');
+const { requireTenantId } = require('../core/utils/tenantHelper');
 const logger = require('../core/utils/logger');
 
 /**
@@ -20,13 +21,8 @@ async function saveEmployeesToCache(employees, req = null) {
   let errorCount = 0;
   
   try {
-    // LAD Architecture: Extract tenant context from request
-    const tenantId = req?.user?.tenant_id || req?.tenant?.id || req?.headers?.['x-tenant-id'];
-    if (!tenantId && process.env.NODE_ENV === 'production') {
-      throw new Error('Tenant context required');
-    }
-    // Fallback for development only
-    const effectiveTenantId = tenantId || process.env.DEV_TENANT_ID || '00000000-0000-0000-0000-000000000001';
+    // LAD Architecture: Use requireTenantId helper (no hardcoded UUIDs)
+    const effectiveTenantId = requireTenantId(null, req, 'saveEmployeesToCache');
     
     // LAD Architecture: Get dynamic schema (no hardcoded lad_dev)
     const schema = getSchema(req);
