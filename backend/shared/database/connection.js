@@ -1,5 +1,6 @@
 const { Pool } = require('pg');
 const logger = require('../../core/utils/logger');
+const { DB_CONFIG } = require('../../core/config/constants');
 
 /**
  * Shared Database Connection
@@ -13,10 +14,10 @@ let pool;
 try {
   // LAD Architecture: Use environment variables for database configuration
   // Supports standard PostgreSQL environment variables (used by most hosting providers)
-  const dbPassword = process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || process.env.PGPASSWORD || '';
+  // SECURITY: Do not use hardcoded fallback for password - only use environment variables
+  const dbPassword = process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || process.env.PGPASSWORD;
   
   // Only create pool if we have database configuration
-  // If password is empty, still create pool (for local dev without password)
   const dbName = process.env.DB_NAME || process.env.POSTGRES_DB || process.env.PGDATABASE;
   
   // LAD Architecture: Database name should be set via environment variable
@@ -34,21 +35,19 @@ try {
   }
   
   const dbConfig = {
-    host: process.env.DB_HOST || process.env.POSTGRES_HOST || process.env.PGHOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || process.env.POSTGRES_PORT || process.env.PGPORT || '5432', 10),
+    // LAD Architecture: Use environment variables or constants (no hardcoded values)
+    host: process.env.DB_HOST || process.env.POSTGRES_HOST || process.env.PGHOST || DB_CONFIG.DEFAULT_HOST,
+    port: parseInt(process.env.DB_PORT || process.env.POSTGRES_PORT || process.env.PGPORT || DB_CONFIG.DEFAULT_PORT, 10),
     database: effectiveDbName,
-    user: process.env.DB_USER || process.env.POSTGRES_USER || process.env.PGUSER || 'postgres',
-    password: dbPassword, // Can be empty string for local dev
+    user: process.env.DB_USER || process.env.POSTGRES_USER || process.env.PGUSER || DB_CONFIG.DEFAULT_USER,
+    // SECURITY: Password must come from environment variables only - no hardcoded fallback
+    // For local dev without password, undefined is acceptable (PostgreSQL allows empty password)
+    password: dbPassword,
     ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
-    max: parseInt(process.env.DB_POOL_MAX || '20', 10),
-    idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '30000', 10),
-    connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT || '2000', 10),
+    max: parseInt(process.env.DB_POOL_MAX || DB_CONFIG.DEFAULT_POOL_MAX, 10),
+    idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || DB_CONFIG.DEFAULT_IDLE_TIMEOUT_MS, 10),
+    connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT || DB_CONFIG.DEFAULT_CONNECTION_TIMEOUT_MS, 10),
   };
-
-  // Ensure password is a string (not undefined)
-  if (dbConfig.password === undefined) {
-    dbConfig.password = '';
-  }
 
   pool = new Pool(dbConfig);
 

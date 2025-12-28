@@ -35,7 +35,15 @@ const DB_CONFIG = {
   // Default pagination for database queries
   DEFAULT_LIMIT: 50,
   DEFAULT_PAGE: 1,
-  MAX_LIMIT: 1000
+  MAX_LIMIT: 1000,
+  
+  // Connection defaults (can be overridden via environment variables)
+  DEFAULT_HOST: 'localhost',
+  DEFAULT_PORT: 5432,
+  DEFAULT_USER: 'postgres',
+  DEFAULT_POOL_MAX: 20,
+  DEFAULT_IDLE_TIMEOUT_MS: 30000,
+  DEFAULT_CONNECTION_TIMEOUT_MS: 2000
 };
 
 /**

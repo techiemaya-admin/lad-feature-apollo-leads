@@ -181,17 +181,18 @@ async function callApolloApi(searchParams) {
     throw new Error('Apollo API key not configured. Set APOLLO_API_KEY or APOLLO_IO_API_KEY in environment variables.');
   }
   
-  // LAD Architecture: Use environment variable for API base URL (allows override for testing/staging)
-  // Match Python script: https://api.apollo.io/api/v1 (includes /api/ in path)
+  // LAD Architecture: Use environment variable or constants (no hardcoded URLs)
+  const { APOLLO_CONFIG } = require('../../../core/config/constants');
   // Normalize base URL to ensure it has /api/ in the path
-  let apolloBaseUrl = process.env.APOLLO_API_BASE_URL || 'https://api.apollo.io/api/v1';
+  let apolloBaseUrl = process.env.APOLLO_API_BASE_URL || APOLLO_CONFIG.DEFAULT_BASE_URL;
   
   // Fix common issue: if base URL is https://api.apollo.io/v2, convert to https://api.apollo.io/api/v2
   if (apolloBaseUrl.includes('api.apollo.io') && !apolloBaseUrl.includes('/api/')) {
     apolloBaseUrl = apolloBaseUrl.replace('api.apollo.io', 'api.apollo.io/api');
   }
   
-  const apolloSearchEndpoint = `${apolloBaseUrl}/mixed_people/search`;
+  // LAD Architecture: Use endpoint constant (no hardcoded paths)
+  const apolloSearchEndpoint = `${apolloBaseUrl}${APOLLO_CONFIG.ENDPOINTS.MIXED_PEOPLE_SEARCH}`;
   
   const {
     organization_locations = [],

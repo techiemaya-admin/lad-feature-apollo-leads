@@ -2,13 +2,21 @@ const axios = require('axios');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
 const { pool } = require('../../../shared/database/connection');
+const { APOLLO_CONFIG } = require('../core/config/constants');
 const logger = require('../core/utils/logger');
 
 class ApolloLeadsService {
   constructor() {
     this.apiKey = process.env.APOLLO_API_KEY || process.env.APOLLO_IO_API_KEY;
-    // LAD Architecture: Use environment variable for API base URL (allows override for testing/staging)
-    this.baseURL = process.env.APOLLO_API_BASE_URL || 'https://api.apollo.io/v1';
+    // LAD Architecture: Use environment variable or constants (no hardcoded URLs)
+    let baseURL = process.env.APOLLO_API_BASE_URL || APOLLO_CONFIG.DEFAULT_BASE_URL;
+    
+    // Fix common issue: if base URL is https://api.apollo.io/v2, convert to https://api.apollo.io/api/v2
+    if (baseURL.includes('api.apollo.io') && !baseURL.includes('/api/')) {
+      baseURL = baseURL.replace('api.apollo.io', 'api.apollo.io/api');
+    }
+    
+    this.baseURL = baseURL;
     
     if (!this.apiKey) {
       logger.warn('[Apollo Leads] Apollo API key not configured');
@@ -84,8 +92,9 @@ class ApolloLeadsService {
     }
 
     try {
+      // LAD Architecture: Use endpoint constant (no hardcoded paths)
       const response = await axios.get(
-        `${this.baseURL}/organizations/${companyId}`,
+        `${this.baseURL}${APOLLO_CONFIG.ENDPOINTS.ORGANIZATION_BY_ID}/${companyId}`,
         {
           headers: { 'X-Api-Key': this.apiKey }
         }
@@ -112,8 +121,9 @@ class ApolloLeadsService {
         payload.q_person_titles = [title_filter];
       }
 
+      // LAD Architecture: Use endpoint constant (no hardcoded paths)
       const response = await axios.post(
-        `${this.baseURL}/people/search`,
+        `${this.baseURL}${APOLLO_CONFIG.ENDPOINTS.PEOPLE_SEARCH}`,
         payload,
         {
           headers: {
