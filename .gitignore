@@ -43,3 +43,44 @@ coverage/
 *.tmp
 *.temp
 .cache/
+
+# Local development files (not for production)
+server.js
+env.example
+# Note: package.json and package-lock.json should be committed for CI/CD to work
+
+# Documentation files
+*.md
+ARCHITECTURE_COMPLIANCE_*.md
+CAMPAIGNS_INTEGRATION_*.md
+ENVIRONMENT_VARIABLES.md
+REFACTORING_SUMMARY.md
+SERVER_SETUP.md
+TEST_REVEAL_README.md
+
+# Test files
+**/*test*.js
+**/*test*.ts
+**/*spec*.js
+**/*spec*.ts
+test/
+tests/
+test-*.js
+test-apollo-*.js
+test-reveal*.js
+
+# Migration files (ignore specific ones)
+backend/migrations/002_add_is_deleted_simple.sql
+backend/migrations/002_add_is_deleted_to_employees_cache.sql
+backend/migrations/002_add_is_deleted_to_employees_cache_tenant.sql
+
+# Environment example files
+env.example
+
+# Ignore core and shared folders (match campaigns structure)
+backend/core/
+backend/shared/
+backend/migrations/
+# Note: backend/services/, backend/routes/, and backend/manifest.js are required by CI workflow
+# Ignore root-level sdk/ folder (duplicate), but allow frontend/sdk/
+/sdk/
