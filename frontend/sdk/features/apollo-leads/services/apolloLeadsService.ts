@@ -41,7 +41,7 @@ import type {
   ApolloHealthResponse,
   ApolloApiResponse,
   ApolloLeadsServiceInterface
-} from '../types/apollo.types';
+} from '../types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3004';
 

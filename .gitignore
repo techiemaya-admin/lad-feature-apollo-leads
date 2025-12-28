@@ -46,17 +46,10 @@ coverage/
 
 # Local development files (not for production)
 server.js
-env.example
 # Note: package.json and package-lock.json should be committed for CI/CD to work
 
 # Documentation files
 *.md
-ARCHITECTURE_COMPLIANCE_*.md
-CAMPAIGNS_INTEGRATION_*.md
-ENVIRONMENT_VARIABLES.md
-REFACTORING_SUMMARY.md
-SERVER_SETUP.md
-TEST_REVEAL_README.md
 
 # Test files
 **/*test*.js
@@ -65,9 +58,6 @@ TEST_REVEAL_README.md
 **/*spec*.ts
 test/
 tests/
-test-*.js
-test-apollo-*.js
-test-reveal*.js
 
 # Migration files (ignore specific ones)
 backend/migrations/002_add_is_deleted_simple.sql
