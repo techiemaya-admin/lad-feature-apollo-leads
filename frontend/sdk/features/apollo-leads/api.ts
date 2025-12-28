@@ -56,7 +56,7 @@ import type {
   ApolloEmployeeSearchResponse,
   ApolloCompany,
   ApolloHealthResponse
-} from './types/apollo.types';
+} from './types';
 
 const API_BASE = '/api/apollo-leads';
 

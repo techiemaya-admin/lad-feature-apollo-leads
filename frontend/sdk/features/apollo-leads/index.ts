@@ -31,9 +31,10 @@ export type {
 // ============================================================================
 // HOOKS
 // ============================================================================
-export { useApolloLeads } from './hooks/useApolloLeads';
-// export { useApolloSearch } from './hooks/useApolloSearch';
-// export { useApolloCredits } from './hooks/useApolloCredits';
+export { useApolloLeads } from './hooks';
+// Re-export from hooks.ts (LAD architecture pattern)
+// export { useApolloSearch } from './hooks';
+// export { useApolloCredits } from './hooks';
 
 // ============================================================================
 // COMPONENTS
@@ -83,7 +84,7 @@ export type {
   ApolloLeadsSearchProps,
   ApolloCompanyCardProps,
   ApolloEmployeeListProps
-} from './types/apollo.types';
+} from './types';
 
 // ============================================================================
 // CONSTANTS
