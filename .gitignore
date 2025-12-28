@@ -70,9 +70,7 @@ env.example
 # Ignore core and shared folders (match campaigns structure)
 backend/core/
 backend/shared/
-backend/services/
-backend/routes/
-backend/manifest.js
 backend/migrations/
+# Note: backend/services/, backend/routes/, and backend/manifest.js are required by CI workflow
 # Ignore root-level sdk/ folder (duplicate), but allow frontend/sdk/
 /sdk/
