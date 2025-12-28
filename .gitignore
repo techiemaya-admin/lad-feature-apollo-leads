@@ -43,3 +43,26 @@ coverage/
 *.tmp
 *.temp
 .cache/
+
+# Local development files (not for production)
+server.js
+# Note: package.json and package-lock.json should be committed for CI/CD to work
+
+# Documentation files
+*.md
+
+# Test files
+**/*test*.js
+**/*test*.ts
+**/*spec*.js
+**/*spec*.ts
+test/
+tests/
+
+# Migration files (ignore specific ones)
+backend/migrations/002_add_is_deleted_simple.sql
+backend/migrations/002_add_is_deleted_to_employees_cache.sql
+backend/migrations/002_add_is_deleted_to_employees_cache_tenant.sql
+
+# Environment example files
+env.example
