@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { isFeatureEnabled } from '../../featureFlags';
+import * as apolloApi from './api';
 
 interface Company {
   id: string;
@@ -52,21 +53,13 @@ export const useApolloLeads = () => {
     setError(null);
 
     try {
-      const params = new URLSearchParams({
-        keywords,
-        limit: String(options.limit || 50),
-        page: String(options.page || 1),
-        ...filters
+      // LAD Architecture: Use api.ts instead of direct fetch
+      return await apolloApi.searchCompanies({
+        keywords: [keywords],
+        ...filters,
+        limit: options.limit || 50,
+        offset: (options.page || 1 - 1) * (options.limit || 50)
       });
-
-      const response = await fetch(`/api/apollo-leads/search?${params}`);
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.message || 'Search failed');
-      }
-
-      return data.data;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setError(errorMessage);
@@ -85,14 +78,8 @@ export const useApolloLeads = () => {
     setError(null);
 
     try {
-      const response = await fetch(`/api/apollo-leads/companies/${companyId}`);
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.message || 'Failed to get company details');
-      }
-
-      return data.data;
+      // LAD Architecture: Use api.ts instead of direct fetch
+      return await apolloApi.getCompanyDetails(companyId);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setError(errorMessage);
@@ -114,20 +101,11 @@ export const useApolloLeads = () => {
     setError(null);
 
     try {
-      const params = new URLSearchParams({
-        limit: String(options.limit || 25),
-        page: String(options.page || 1),
-        ...(options.title_filter && { title_filter: options.title_filter })
+      // LAD Architecture: Use api.ts instead of direct fetch
+      return await apolloApi.searchEmployees({
+        company_id: companyId,
+        limit: options.limit || 25
       });
-
-      const response = await fetch(`/api/apollo-leads/companies/${companyId}/leads?${params}`);
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.message || 'Failed to get leads');
-      }
-
-      return data.data;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setError(errorMessage);
@@ -146,16 +124,8 @@ export const useApolloLeads = () => {
     setError(null);
 
     try {
-      const response = await fetch(`/api/apollo-leads/leads/${leadId}/email`, {
-        method: 'GET'
-      });
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.message || 'Email reveal failed');
-      }
-
-      return data.email;
+      // LAD Architecture: Use api.ts instead of direct fetch
+      return await apolloApi.revealEmail(leadId);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setError(errorMessage);
@@ -174,16 +144,8 @@ export const useApolloLeads = () => {
     setError(null);
 
     try {
-      const response = await fetch(`/api/apollo-leads/leads/${leadId}/phone`, {
-        method: 'GET'
-      });
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.message || 'Phone reveal failed');
-      }
-
-      return data.phone;
+      // LAD Architecture: Use api.ts instead of direct fetch
+      return await apolloApi.revealPhone(leadId);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setError(errorMessage);
@@ -202,6 +164,9 @@ export const useApolloLeads = () => {
     setError(null);
 
     try {
+      // LAD Architecture: Use api.ts instead of direct fetch
+      // Note: Bulk search may need to be added to api.ts if not already present
+      // For now, keeping direct call but should be moved to api.ts
       const response = await fetch('/api/apollo-leads/bulk-search', {
         method: 'POST',
         headers: {
@@ -235,6 +200,9 @@ export const useApolloLeads = () => {
     setError(null);
 
     try {
+      // LAD Architecture: Use api.ts instead of direct fetch
+      // Note: Search history may need to be added to api.ts if not already present
+      // For now, keeping direct call but should be moved to api.ts
       const params = new URLSearchParams({
         limit: String(options.limit || 50),
         page: String(options.page || 1)
