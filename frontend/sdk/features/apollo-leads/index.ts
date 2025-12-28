@@ -31,14 +31,14 @@ export type {
 // ============================================================================
 // HOOKS
 // ============================================================================
-export { useApolloLeads } from './useApolloLeads';
+export { useApolloLeads } from './hooks/useApolloLeads';
 // export { useApolloSearch } from './hooks/useApolloSearch';
 // export { useApolloCredits } from './hooks/useApolloCredits';
 
 // ============================================================================
 // COMPONENTS
 // ============================================================================
-export { default as ApolloLeadsSearch } from './ApolloLeadsSearch';
+export { default as ApolloLeadsSearch } from './components/ApolloLeadsSearch';
 // export { ApolloCompanyCard } from './components/ApolloCompanyCard';
 // export { ApolloEmployeeList } from './components/ApolloEmployeeList';
 
