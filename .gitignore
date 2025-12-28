@@ -66,3 +66,12 @@ backend/migrations/002_add_is_deleted_to_employees_cache_tenant.sql
 
 # Environment example files
 env.example
+
+# Ignore core and shared folders (match campaigns structure)
+backend/core/
+backend/shared/
+backend/services/
+backend/routes/
+backend/manifest.js
+backend/migrations/
+sdk/
