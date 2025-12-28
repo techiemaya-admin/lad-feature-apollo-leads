@@ -279,7 +279,6 @@ async function searchEmployeesFromApollo(searchParams) {
     organization_locations = [],
     person_titles = [],
     organization_industries = [],
-    per_page = 100,
     page = 1
   } = searchParams;
   
