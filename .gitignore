@@ -74,4 +74,5 @@ backend/services/
 backend/routes/
 backend/manifest.js
 backend/migrations/
-sdk/
+# Ignore root-level sdk/ folder (duplicate), but allow frontend/sdk/
+/sdk/
