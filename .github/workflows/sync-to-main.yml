@@ -47,6 +47,8 @@ jobs:
     steps:
       - name: Checkout feature repo
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
       - name: Checkout LAD-Frontend
         uses: actions/checkout@v3
