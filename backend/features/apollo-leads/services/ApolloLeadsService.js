@@ -20,14 +20,8 @@ class ApolloLeadsService {
   constructor() {
     this.apiKey = process.env.APOLLO_API_KEY || process.env.APOLLO_IO_API_KEY;
     // LAD Architecture: Use environment variable for API base URL
-    let baseURL = process.env.APOLLO_API_BASE_URL ?? APOLLO_CONFIG.DEFAULT_BASE_URL;
-    
-    // Fix common issue: if base URL is https://api.apollo.io/v2, convert to https://api.apollo.io/api/v2
-    if (baseURL.includes('api.apollo.io') && !baseURL.includes('/api/')) {
-      baseURL = baseURL.replace('api.apollo.io', 'api.apollo.io/api');
-    }
-    
-    this.baseURL = baseURL;
+    // Apollo.io API v1 base URL: https://api.apollo.io/v1
+    this.baseURL = process.env.APOLLO_API_BASE_URL || APOLLO_CONFIG.DEFAULT_BASE_URL;
     
     // Initialize reveal service
     this.revealService = new ApolloRevealService(this.apiKey, this.baseURL);
@@ -63,23 +57,51 @@ class ApolloLeadsService {
       const mainKeyword = keywords.length > 0 ? keywords[0] : '';
       
       const payload = {
-        api_key: this.apiKey,
+        // Apollo.io API: Prefer X-Api-Key header over api_key in body
+        // Remove api_key from body when using header to avoid conflicts
         q_organization_name: mainKeyword,
         page: page,
         per_page: Math.min(limit, APOLLO_CONFIG.MAX_PER_PAGE)
       };
 
+      // Apollo.io API parameter format for /mixed_companies/search:
+      // - organization_locations: Array of location strings (e.g., ["San Francisco, CA", "New York, NY"])
+      // - organization_industries: Array of industry name strings (e.g., ["Software", "Technology"])
+      //   Note: industry_tag_ids is for numeric tag IDs, but organization_industries is more common for names
+      // - organization_num_employees_ranges: Array of employee range strings
+      
       if (industry) {
-        payload.industry_tag_ids = [industry];
+        // Support both array and single value
+        const industryValue = Array.isArray(industry) ? industry : [industry];
+        // Check if first value is a numeric string (tag ID) or text (industry name)
+        const firstValue = String(industryValue[0] || '');
+        const isNumeric = /^\d+$/.test(firstValue.trim()); // Only digits
+        
+        if (isNumeric) {
+          // Numeric tag IDs - use industry_tag_ids
+          payload.industry_tag_ids = industryValue.map(id => parseInt(id));
+        } else {
+          // Text industry names - use organization_industries (preferred for company search)
+          payload.organization_industries = industryValue;
+        }
       }
       
       if (location) {
-        payload.organization_locations = [location];
+        // organization_locations must be an array of location strings
+        // Format: ["City, State", "City, Country", etc.]
+        payload.organization_locations = Array.isArray(location) ? location : [location];
       }
       
       if (company_size) {
-        payload.organization_num_employees_ranges = [company_size];
+        // organization_num_employees_ranges must be an array
+        payload.organization_num_employees_ranges = Array.isArray(company_size) ? company_size : [company_size];
       }
+
+      // Log payload for debugging (remove sensitive data in production)
+      logger.debug('[Apollo Leads] API request payload', {
+        url: `${this.baseURL}${APOLLO_CONFIG.ENDPOINTS.ORGANIZATIONS_SEARCH}`,
+        payload: { ...payload, hasApiKey: !!this.apiKey }
+      });
 
       const response = await axios.post(
         `${this.baseURL}${APOLLO_CONFIG.ENDPOINTS.ORGANIZATIONS_SEARCH}`,
@@ -94,6 +116,11 @@ class ApolloLeadsService {
       );
 
       const companies = response.data.organizations || [];
+      
+      logger.debug('[Apollo Leads] API response', {
+        companiesFound: companies.length,
+        hasPagination: !!response.data.pagination
+      });
       
       // Save search to history (if req context available)
       if (req) {
@@ -111,7 +138,22 @@ class ApolloLeadsService {
 
       return ApolloFormatterService.formatCompanies(companies);
     } catch (error) {
-      logger.error('[Apollo Leads] Apollo API error', { error: error.response?.data || error.message });
+      const errorDetails = {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        url: error.config?.url,
+        method: error.config?.method
+      };
+      logger.error('[Apollo Leads] Apollo API error', errorDetails);
+      
+      // Provide more helpful error message for parameter issues
+      if (error.response?.status === 422) {
+        const errorMsg = error.response?.data?.error || error.message;
+        throw new Error(`Apollo search failed: ${errorMsg}. Check that industry/location parameters are formatted correctly.`);
+      }
+      
       throw new Error(`Apollo search failed: ${error.message}`);
     }
   }

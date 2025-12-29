@@ -46,6 +46,13 @@ coverage/
 
 # Local development files (not for production)
 server.js
+test-server.js
+
+# Local test scripts and temporary files (root level)
+START_*.sh
+debug-*.js
+test-*.http
+
 # Note: package.json and package-lock.json should be committed for CI/CD to work
 
 # Documentation files
@@ -66,3 +73,11 @@ backend/migrations/002_add_is_deleted_to_employees_cache_tenant.sql
 
 # Environment example files
 env.example
+
+# Ignore core and shared folders (match campaigns structure)
+backend/core/
+backend/shared/
+backend/migrations/
+# Note: backend/services/, backend/routes/, and backend/manifest.js are required by CI workflow
+# Ignore root-level sdk/ folder (duplicate), but allow frontend/sdk/
+/sdk/

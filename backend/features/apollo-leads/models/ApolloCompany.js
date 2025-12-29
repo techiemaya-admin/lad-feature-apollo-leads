@@ -1,146 +1,126 @@
 /**
  * Apollo Company Model
- * Manages Apollo company data and enrichment
- * LAD Architecture Compliant
+ * LAD Architecture: SQL-free - data shapes, validation, helpers only
+ * 
+ * This file contains:
+ * - Data shape definitions
+ * - Validation schemas
+ * - Mapping helpers
+ * - Constants/enums
+ * NO database queries - SQL belongs in repositories
  */
 
-const { pool } = require('../../../shared/database/connection');
-const { getSchema } = require('../../../core/utils/schemaHelper');
-const logger = require('../../../core/utils/logger');
+/**
+ * Apollo Company Data Shape
+ * @typedef {Object} ApolloCompanyData
+ * @property {string} apolloId - Apollo.io company ID
+ * @property {string} name - Company name
+ * @property {string} [domain] - Company domain
+ * @property {string} [industry] - Industry
+ * @property {number} [employeeCount] - Employee count
+ * @property {string} [revenue] - Revenue
+ * @property {Object} [location] - Location data
+ * @property {string} [phone] - Phone number
+ * @property {string} [website] - Website URL
+ * @property {Object} [enrichedData] - Additional enriched data
+ * @property {string} tenantId - Tenant ID (required)
+ * @property {string} userId - User ID (required)
+ * @property {Object} [metadata] - Metadata JSONB field
+ * @property {boolean} [is_deleted] - Soft delete flag
+ */
 
-class ApolloCompany {
-  /**
-   * Save or update company data
-   * LAD Architecture: Uses tenant_id, dynamic schema, metadata, is_deleted
-   */
-  static async upsert(companyData, req = null) {
-    try {
-      const {
-        apolloId,
-        name,
-        domain,
-        industry,
-        employeeCount,
-        revenue,
-        location,
-        phone,
-        website,
-        enrichedData,
-        tenantId, // Changed from organizationId
-        userId,
-        metadata = {},
-        is_deleted = false
-      } = companyData;
+/**
+ * Default values for Apollo Company
+ */
+const DEFAULT_VALUES = {
+  metadata: {},
+  is_deleted: false
+};
 
-      const schema = getSchema(req);
-
-      const result = await pool.query(`
-        INSERT INTO ${schema}.apollo_companies (
-          apollo_id,
-          name,
-          domain,
-          industry,
-          employee_count,
-          revenue,
-          location,
-          phone,
-          website,
-          enriched_data,
-          tenant_id, -- Changed from organization_id
-          user_id,
-          metadata, -- New field
-          is_deleted -- New field
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-        ON CONFLICT (apollo_id, tenant_id) -- Tenant-scoped ON CONFLICT
-        DO UPDATE SET
-          name = EXCLUDED.name,
-          domain = EXCLUDED.domain,
-          industry = EXCLUDED.industry,
-          employee_count = EXCLUDED.employee_count,
-          revenue = EXCLUDED.revenue,
-          location = EXCLUDED.location,
-          phone = EXCLUDED.phone,
-          website = EXCLUDED.website,
-          enriched_data = EXCLUDED.enriched_data,
-          metadata = EXCLUDED.metadata, -- Update metadata
-          is_deleted = EXCLUDED.is_deleted, -- Update is_deleted
-          updated_at = CURRENT_TIMESTAMP
-        RETURNING *
-      `, [
-        apolloId,
-        name,
-        domain,
-        industry,
-        employeeCount,
-        revenue,
-        location,
-        phone,
-        website,
-        JSON.stringify(enrichedData),
-        tenantId, // Use tenantId
-        userId,
-        JSON.stringify(metadata), // Default metadata
-        is_deleted // Default is_deleted
-      ]);
-
-      return result.rows[0];
-    } catch (error) {
-      logger.error('[Apollo Company] Error upserting company', {
-        error: error.message,
-        stack: error.stack
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Find company by Apollo ID
-   * LAD Architecture: Uses tenant_id, dynamic schema
-   */
-  static async findByApolloId(apolloId, tenantId, req = null) {
-    try {
-      const schema = getSchema(req);
-
-      const result = await pool.query(`
-        SELECT * FROM ${schema}.apollo_companies
-        WHERE apollo_id = $1 AND tenant_id = $2 AND is_deleted = false
-      `, [apolloId, tenantId]);
-
-      return result.rows[0] || null;
-    } catch (error) {
-      logger.error('[Apollo Company] Error finding company', {
-        error: error.message,
-        stack: error.stack
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Find companies by tenant
-   * LAD Architecture: Uses tenant_id, dynamic schema
-   */
-  static async findByTenant(tenantId, options = {}, req = null) {
-    try {
-      const { limit = 50, offset = 0 } = options;
-      const schema = getSchema(req);
-
-      const result = await pool.query(`
-        SELECT * FROM ${schema}.apollo_companies
-        WHERE tenant_id = $1 AND is_deleted = false
-        ORDER BY updated_at DESC
-        LIMIT $2 OFFSET $3
-      `, [tenantId, limit, offset]);
-
-      return result.rows;
-    } catch (error) {
-      logger.error('[Apollo Company] Error finding companies', {
-        error: error.message,
-        stack: error.stack
-      });
-      throw error;
-    }
-  }
+/**
+ * Map Apollo.io API response to our company data shape
+ * @param {Object} apolloCompany - Raw Apollo.io company object
+ * @param {string} tenantId - Tenant ID
+ * @param {string} userId - User ID
+ * @returns {ApolloCompanyData}
+ */
+function mapApolloCompanyToDataShape(apolloCompany, tenantId, userId) {
+  return {
+    apolloId: apolloCompany.id,
+    name: apolloCompany.name,
+    domain: apolloCompany.primary_domain || apolloCompany.domain,
+    industry: apolloCompany.primary_vertical || apolloCompany.industry,
+    employeeCount: apolloCompany.num_current_employees || apolloCompany.employee_count,
+    revenue: apolloCompany.estimated_revenue || apolloCompany.revenue,
+    location: {
+      country: apolloCompany.organization_raw_address_country,
+      city: apolloCompany.organization_raw_address_city,
+      state: apolloCompany.organization_raw_address_state
+    },
+    phone: apolloCompany.phone_number || apolloCompany.phone,
+    website: apolloCompany.website_url || apolloCompany.website,
+    enrichedData: apolloCompany,
+    tenantId,
+    userId,
+    metadata: DEFAULT_VALUES.metadata,
+    is_deleted: DEFAULT_VALUES.is_deleted
+  };
 }
 
-module.exports = ApolloCompany;
+/**
+ * Format company data for API response
+ * @param {Object} dbRow - Database row
+ * @returns {Object} Formatted company object
+ */
+function formatCompanyForResponse(dbRow) {
+  return {
+    id: dbRow.id,
+    apollo_id: dbRow.apollo_id,
+    name: dbRow.name,
+    domain: dbRow.domain,
+    industry: dbRow.industry,
+    employee_count: dbRow.employee_count,
+    revenue: dbRow.revenue,
+    location: typeof dbRow.location === 'string' ? JSON.parse(dbRow.location) : dbRow.location,
+    phone: dbRow.phone,
+    website: dbRow.website,
+    enriched_data: typeof dbRow.enriched_data === 'string' ? JSON.parse(dbRow.enriched_data) : dbRow.enriched_data,
+    metadata: typeof dbRow.metadata === 'string' ? JSON.parse(dbRow.metadata) : dbRow.metadata,
+    created_at: dbRow.created_at,
+    updated_at: dbRow.updated_at
+  };
+}
+
+/**
+ * Validate company data
+ * @param {Object} companyData - Company data to validate
+ * @returns {Object} Validation result { valid: boolean, errors: string[] }
+ */
+function validateCompanyData(companyData) {
+  const errors = [];
+
+  if (!companyData.apolloId) {
+    errors.push('apolloId is required');
+  }
+  if (!companyData.name) {
+    errors.push('name is required');
+  }
+  if (!companyData.tenantId) {
+    errors.push('tenantId is required');
+  }
+  if (!companyData.userId) {
+    errors.push('userId is required');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
+module.exports = {
+  DEFAULT_VALUES,
+  mapApolloCompanyToDataShape,
+  formatCompanyForResponse,
+  validateCompanyData
+};

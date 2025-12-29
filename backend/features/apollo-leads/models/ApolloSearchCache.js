@@ -1,155 +1,165 @@
 /**
  * Apollo Search Cache Model
- * Manages cached Apollo search results for performance optimization
- * LAD Architecture Compliant
+ * LAD Architecture: SQL-free - data shapes, validation, helpers only
+ * 
+ * This file contains:
+ * - Data shape definitions
+ * - Validation schemas
+ * - Mapping helpers
+ * - Constants/enums
+ * NO database queries - SQL belongs in repositories
  */
 
-const { pool } = require('../../../shared/database/connection');
-const { getSchema } = require('../../../core/utils/schemaHelper');
-const logger = require('../../../core/utils/logger');
+/**
+ * Apollo Search Cache Data Shape
+ * @typedef {Object} ApolloSearchCacheData
+ * @property {string} searchKey - Unique search key (hash of search params)
+ * @property {Object} results - Cached search results
+ * @property {string} tenantId - Tenant ID (required)
+ * @property {string} userId - User ID (required)
+ * @property {Object} [metadata] - Metadata JSONB field
+ * @property {boolean} [is_deleted] - Soft delete flag
+ */
 
-class ApolloSearchCache {
-  /**
-   * Create or update search cache
-   * LAD Architecture: Uses tenant_id, dynamic schema, metadata, is_deleted
-   */
-  static async upsert({ searchKey, results, tenantId, userId }, req = null) {
-    try {
-      const schema = getSchema(req);
+/**
+ * Cache TTL constants (in hours)
+ */
+const CACHE_TTL = {
+  DEFAULT: 24,
+  SHORT: 1,
+  MEDIUM: 12,
+  LONG: 48
+};
 
-      const result = await pool.query(`
-        INSERT INTO ${schema}.apollo_search_cache (
-          search_key,
-          results,
-          tenant_id, -- Changed from organization_id
-          user_id,
-          hit_count,
-          last_accessed_at,
-          metadata, -- New field
-          is_deleted -- New field
-        ) VALUES ($1, $2, $3, $4, 1, CURRENT_TIMESTAMP, $5, $6)
-        ON CONFLICT (search_key, tenant_id) -- Tenant-scoped ON CONFLICT
-        DO UPDATE SET
-          results = EXCLUDED.results,
-          hit_count = ${schema}.apollo_search_cache.hit_count + 1,
-          last_accessed_at = CURRENT_TIMESTAMP,
-          metadata = EXCLUDED.metadata, -- Update metadata
-          is_deleted = EXCLUDED.is_deleted, -- Update is_deleted
-          updated_at = CURRENT_TIMESTAMP
-        RETURNING *
-      `, [
-        searchKey,
-        JSON.stringify(results),
-        tenantId, // Use tenantId
-        userId,
-        JSON.stringify({}), // Default metadata
-        false // Default is_deleted
-      ]);
+/**
+ * Default values for search cache
+ */
+const DEFAULT_VALUES = {
+  metadata: {},
+  is_deleted: false,
+  hit_count: 1
+};
 
-      return result.rows[0];
-    } catch (error) {
-      logger.error('[Apollo Search Cache] Error upserting search cache', {
-        error: error.message,
-        stack: error.stack
-      });
-      throw error;
-    }
+/**
+ * Generate cache key from search parameters
+ * @param {Object} searchParams - Search parameters
+ * @returns {string} Cache key
+ */
+function generateCacheKey(searchParams) {
+  const normalized = {
+    keywords: Array.isArray(searchParams.keywords) 
+      ? searchParams.keywords.sort().join(',') 
+      : searchParams.keywords || '',
+    location: searchParams.location || '',
+    industry: searchParams.industry || '',
+    company_size: searchParams.company_size || '',
+    revenue_range: searchParams.revenue_range || '',
+    technology: searchParams.technology || '',
+    limit: searchParams.limit || 50,
+    page: searchParams.page || 1
+  };
+
+  // Create a deterministic hash-like key
+  const keyString = JSON.stringify(normalized);
+  // Simple hash (for production, use crypto.createHash)
+  let hash = 0;
+  for (let i = 0; i < keyString.length; i++) {
+    const char = keyString.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
   }
-
-  /**
-   * Get cached search results
-   * LAD Architecture: Uses tenant_id, dynamic schema
-   */
-  static async findByKey(searchKey, tenantId, req = null) {
-    try {
-      const schema = getSchema(req);
-
-      const result = await pool.query(`
-        SELECT * FROM ${schema}.apollo_search_cache
-        WHERE search_key = $1 
-          AND tenant_id = $2
-          AND is_deleted = false
-          AND created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'
-      `, [searchKey, tenantId]);
-
-      if (result.rows[0]) {
-        // Update access stats
-        await pool.query(`
-          UPDATE ${schema}.apollo_search_cache
-          SET 
-            hit_count = hit_count + 1,
-            last_accessed_at = CURRENT_TIMESTAMP
-          WHERE search_key = $1 AND tenant_id = $2
-        `, [searchKey, tenantId]);
-      }
-
-      return result.rows[0] || null;
-    } catch (error) {
-      logger.error('[Apollo Search Cache] Error finding cached search', {
-        error: error.message,
-        stack: error.stack
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Clear old cache entries
-   * LAD Architecture: Uses dynamic schema
-   */
-  static async pruneOldEntries(hoursOld = 24, req = null) {
-    try {
-      const schema = getSchema(req);
-
-      const result = await pool.query(`
-        DELETE FROM ${schema}.apollo_search_cache
-        WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '${hoursOld} hours'
-        RETURNING id
-      `, []);
-
-      return result.rowCount;
-    } catch (error) {
-      logger.error('[Apollo Search Cache] Error pruning search cache', {
-        error: error.message,
-        stack: error.stack
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Get cache statistics
-   * LAD Architecture: Uses tenant_id, dynamic schema
-   */
-  static async getStats(tenantId = null, req = null) {
-    try {
-      const schema = getSchema(req);
-      let sql = `
-        SELECT 
-          COUNT(*) as total_entries,
-          SUM(hit_count) as total_hits,
-          AVG(hit_count) as avg_hits_per_entry,
-          MAX(last_accessed_at) as most_recent_access
-        FROM ${schema}.apollo_search_cache
-        WHERE is_deleted = false
-      `;
-      const params = [];
-
-      if (tenantId) {
-        sql += ` AND tenant_id = $1`;
-        params.push(tenantId);
-      }
-
-      const result = await pool.query(sql, params);
-      return result.rows[0];
-    } catch (error) {
-      logger.error('[Apollo Search Cache] Error getting cache stats', {
-        error: error.message,
-        stack: error.stack
-      });
-      throw error;
-    }
-  }
+  
+  return `apollo_search_${Math.abs(hash)}`;
 }
 
-module.exports = ApolloSearchCache;
+/**
+ * Map search params to cache data shape
+ * @param {Object} searchParams - Search parameters
+ * @param {Array} results - Search results
+ * @param {string} tenantId - Tenant ID
+ * @param {string} userId - User ID
+ * @returns {ApolloSearchCacheData}
+ */
+function mapToCacheDataShape(searchParams, results, tenantId, userId) {
+  return {
+    searchKey: generateCacheKey(searchParams),
+    results,
+    tenantId,
+    userId,
+    metadata: DEFAULT_VALUES.metadata,
+    is_deleted: DEFAULT_VALUES.is_deleted
+  };
+}
+
+/**
+ * Format cache data for API response
+ * @param {Object} dbRow - Database row
+ * @returns {Object} Formatted cache object
+ */
+function formatCacheForResponse(dbRow) {
+  return {
+    id: dbRow.id,
+    search_key: dbRow.search_key,
+    results: typeof dbRow.results === 'string' ? JSON.parse(dbRow.results) : dbRow.results,
+    hit_count: dbRow.hit_count,
+    last_accessed_at: dbRow.last_accessed_at,
+    metadata: typeof dbRow.metadata === 'string' ? JSON.parse(dbRow.metadata) : dbRow.metadata,
+    created_at: dbRow.created_at,
+    updated_at: dbRow.updated_at
+  };
+}
+
+/**
+ * Validate cache data
+ * @param {Object} cacheData - Cache data to validate
+ * @returns {Object} Validation result { valid: boolean, errors: string[] }
+ */
+function validateCacheData(cacheData) {
+  const errors = [];
+
+  if (!cacheData.searchKey) {
+    errors.push('searchKey is required');
+  }
+  if (!cacheData.results) {
+    errors.push('results is required');
+  }
+  if (!cacheData.tenantId) {
+    errors.push('tenantId is required');
+  }
+  if (!cacheData.userId) {
+    errors.push('userId is required');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
+/**
+ * Check if cache entry is still valid (not expired)
+ * @param {Object} cacheEntry - Cache entry from database
+ * @param {number} ttlHours - Time to live in hours
+ * @returns {boolean} True if cache is still valid
+ */
+function isCacheValid(cacheEntry, ttlHours = CACHE_TTL.DEFAULT) {
+  if (!cacheEntry || !cacheEntry.created_at) {
+    return false;
+  }
+
+  const cacheDate = new Date(cacheEntry.created_at);
+  const now = new Date();
+  const hoursDiff = (now - cacheDate) / (1000 * 60 * 60);
+
+  return hoursDiff < ttlHours;
+}
+
+module.exports = {
+  CACHE_TTL,
+  DEFAULT_VALUES,
+  generateCacheKey,
+  mapToCacheDataShape,
+  formatCacheForResponse,
+  validateCacheData,
+  isCacheValid
+};

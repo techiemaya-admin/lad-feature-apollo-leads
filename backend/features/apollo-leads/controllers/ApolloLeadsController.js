@@ -18,6 +18,11 @@ class ApolloLeadsController {
     try {
       // LAD Architecture: Validate tenant context
       validateTenant(req);
+      
+      // Support both POST (body) and GET (query) parameters
+      // POST requests use req.body, GET requests use req.query
+      const params = req.method === 'POST' ? req.body : req.query;
+      
       const {
         keywords,
         industry,
@@ -27,10 +32,10 @@ class ApolloLeadsController {
         technology,
         limit = 50,
         page = 1
-      } = req.query;
+      } = params;
 
       const searchParams = {
-        keywords: keywords ? keywords.split(',') : [],
+        keywords: keywords ? (Array.isArray(keywords) ? keywords : keywords.split(',')) : [],
         industry,
         location,
         company_size,
@@ -40,7 +45,7 @@ class ApolloLeadsController {
         page: parseInt(page)
       };
 
-      const results = await ApolloLeadsService.searchCompanies(searchParams);
+      const results = await ApolloLeadsService.searchCompanies(searchParams, req);
       
       res.json({
         success: true,

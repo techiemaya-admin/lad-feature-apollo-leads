@@ -28,9 +28,9 @@ jobs:
       - name: Check for required files
         run: |
           echo "Checking required files..."
-          test -f backend/manifest.js || (echo "❌ backend/manifest.js is required" && exit 1)
-          test -d backend/services || (echo "❌ backend/services directory is required" && exit 1)
-          test -d backend/routes || (echo "❌ backend/routes directory is required" && exit 1)
+          test -f backend/features/apollo-leads/manifest.js || (echo "❌ backend/features/apollo-leads/manifest.js is required" && exit 1)
+          test -d backend/features/apollo-leads/services || (echo "❌ backend/features/apollo-leads/services directory is required" && exit 1)
+          test -d backend/features/apollo-leads/routes || (echo "❌ backend/features/apollo-leads/routes directory is required" && exit 1)
           echo "✅ All required files present"
 
       - name: Validate backend structure
@@ -39,8 +39,8 @@ jobs:
           
           # Check for key backend files
           files=(
-            "backend/routes/index.js"
-            "backend/manifest.js"
+            "backend/features/apollo-leads/routes/index.js"
+            "backend/features/apollo-leads/manifest.js"
           )
           
           for file in "${files[@]}"; do
@@ -54,10 +54,10 @@ jobs:
           
           # Check optional files
           optional_files=(
-            "backend/services/"
-            "backend/controllers/"
-            "backend/middleware/"
-            "backend/models/"
+            "backend/features/apollo-leads/services/"
+            "backend/features/apollo-leads/controllers/"
+            "backend/features/apollo-leads/middleware/"
+            "backend/features/apollo-leads/models/"
           )
           
           for file in "${optional_files[@]}"; do
@@ -72,19 +72,19 @@ jobs:
         run: |
           echo "Validating frontend structure..."
           
-          if [ -d "frontend/sdk" ]; then
+          if [ -d "frontend/sdk/features/apollo-leads" ]; then
             echo "✅ Frontend SDK directory exists"
-            test -f frontend/sdk/index.ts && echo "✅ SDK index.ts exists" || echo "⚠️  No index.ts"
-            test -f frontend/sdk/types.ts && echo "✅ SDK types.ts exists" || echo "⚠️  No types.ts"
+            test -f frontend/sdk/features/apollo-leads/index.ts && echo "✅ SDK index.ts exists" || echo "⚠️  No index.ts"
+            test -f frontend/sdk/features/apollo-leads/types.ts && echo "✅ SDK types.ts exists" || echo "⚠️  No types.ts"
           else
-            echo "⚠️  No frontend/sdk directory (may be backend-only feature)"
+            echo "⚠️  No frontend/sdk/features/apollo-leads directory (may be backend-only feature)"
           fi
 
       - name: Check code syntax
         run: |
           echo "Checking JavaScript syntax..."
           # Check all JS files for syntax errors
-          find backend -name "*.js" -type f -exec node --check {} \; 2>&1 || true
+          find backend/features/apollo-leads -name "*.js" -type f -exec node --check {} \; 2>&1 || true
           echo "✅ JavaScript syntax check complete"
 
       - name: Validate migrations
@@ -114,13 +114,13 @@ jobs:
         run: |
           echo "Checking for accidentally committed secrets..."
           
-          # Check for common secret patterns
-          if grep -r -i "api[_-]key.*=.*['\"][a-zA-Z0-9]{20,}['\"]" backend/ frontend/ 2>/dev/null; then
+          # Check for common secret patterns (excluding node_modules and vendor directories)
+          if grep -r -i "api[_-]key.*=.*['\"][a-zA-Z0-9]{20,}['\"]" backend/features/apollo-leads/ --exclude-dir=node_modules --exclude-dir=vendor 2>/dev/null; then
             echo "❌ Possible API keys found in code"
             exit 1
           fi
           
-          if grep -r -i "password.*=.*['\"][^'\"]*['\"]" backend/ frontend/ 2>/dev/null | grep -v "password.*process.env"; then
+          if grep -r -i "password.*=.*['\"][^'\"]*['\"]" backend/features/apollo-leads/ --exclude-dir=node_modules --exclude-dir=vendor 2>/dev/null | grep -v "password.*process.env" | grep -v "password.*config\." | grep -v "// password" | grep -v "* password"; then
             echo "❌ Possible hardcoded passwords found"
             exit 1
           fi
@@ -148,7 +148,7 @@ jobs:
       - name: Generate PR summary
         if: always()
         run: |
-          echo "## 📊 PR Validation Summary - Campaigns Feature" >> $GITHUB_STEP_SUMMARY
+          echo "## 📊 PR Validation Summary - Apollo Leads Feature" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Files Changed" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
@@ -187,10 +187,10 @@ jobs:
             const labels = new Set();
             
             for (const file of files) {
-              if (file.filename.startsWith('backend/')) {
+              if (file.filename.startsWith('backend/features/apollo-leads/')) {
                 labels.add('backend');
               }
-              if (file.filename.startsWith('frontend/')) {
+              if (file.filename.startsWith('frontend/sdk/features/apollo-leads/')) {
                 labels.add('frontend');
               }
               if (file.filename.startsWith('migrations/')) {

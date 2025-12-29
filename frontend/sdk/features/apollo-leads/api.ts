@@ -49,124 +49,146 @@ function getAuthHeaders(): HeadersInit {
   return token ? { 'Authorization': `Bearer ${token}` } : {};
 }
 
-import type {
-  ApolloSearchParams,
-  ApolloSearchResponse,
-  ApolloEmployeeSearchParams,
-  ApolloEmployeeSearchResponse,
-  ApolloCompany,
-  ApolloHealthResponse
-} from './types/apollo.types';
-
-const API_BASE = '/api/apollo-leads';
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3004';
+const BASE_PATH = `${API_BASE_URL}/api/apollo-leads`;
 
 /**
- * Search for companies using Apollo.io
+ * Search companies using Apollo.io
  */
-export async function searchCompanies(params: ApolloSearchParams): Promise<ApolloSearchResponse> {
-  const response = await apiClient.post<{ data: ApolloSearchResponse }>(
-    `${API_BASE}/search`,
-    {
-      query: params.query || params.keywords?.join(' '),
-      location: params.location,
-      industry: params.industry,
-      employee_count_min: params.employee_count_min,
-      employee_count_max: params.employee_count_max,
-      revenue_min: params.revenue_min,
-      revenue_max: params.revenue_max,
-      technologies: params.technologies,
-      limit: params.limit || 50,
-      offset: params.offset || 0
-    }
-  );
-  return response.data.data;
+export async function searchCompanies(params: {
+  query?: string;
+  keywords?: string[];
+  location?: string;
+  industry?: string[];
+  limit?: number;
+  offset?: number;
+}) {
+  const response = await apiClient.post(`${BASE_PATH}/search`, params);
+  return response.data;
 }
 
 /**
- * Get detailed company information
+ * Get company details
  */
-export async function getCompanyDetails(companyId: string): Promise<ApolloCompany> {
-  const response = await apiClient.get<{ data: ApolloCompany }>(
-    `${API_BASE}/companies/${companyId}`
-  );
-  return response.data.data;
+export async function getCompanyDetails(companyId: string) {
+  const response = await apiClient.get(`${BASE_PATH}/companies/${companyId}`);
+  return response.data;
 }
 
 /**
- * Search for employees from database cache
- * Falls back to Apollo API if no results found
+ * Search employees at a company
  */
-export async function searchEmployeesFromDb(params: ApolloEmployeeSearchParams): Promise<ApolloEmployeeSearchResponse> {
-  const response = await apiClient.post<{ data: ApolloEmployeeSearchResponse }>(
-    `${API_BASE}/search-employees-from-db`,
-    {
-      organization_locations: params.organization_locations || [],
-      person_titles: params.person_titles || [],
-      organization_industries: params.organization_industries || [],
-      per_page: params.per_page || 100,
-      page: params.page || 1
-    }
-  );
-  return response.data.data || response.data;
-}
-
-/**
- * Search for employees at a company
- */
-export async function searchEmployees(params: ApolloEmployeeSearchParams): Promise<ApolloEmployeeSearchResponse> {
-  const response = await apiClient.post<{ data: ApolloEmployeeSearchResponse }>(
-    `${API_BASE}/employees/search`,
-    {
-      company_id: params.company_id,
-      company_name: params.company_name,
-      titles: params.titles,
-      seniority: params.seniority,
-      departments: params.departments,
-      location: params.location,
-      limit: params.limit || 50
-    }
-  );
-  return response.data.data;
+export async function searchEmployees(params: {
+  company_id?: string;
+  company_name?: string;
+  titles?: string[];
+  seniority?: string[];
+  departments?: string[];
+  location?: string;
+  limit?: number;
+}) {
+  const response = await apiClient.post(`${BASE_PATH}/employees/search`, params);
+  return response.data;
 }
 
 /**
  * Reveal email for a person (costs 1 credit)
- * Supports both GET (with personId in URL) and POST (with person_id in body)
  */
-export async function revealEmail(personId: string, employeeName?: string): Promise<{ success: boolean; email?: string; from_cache?: boolean; credits_used?: number; error?: string }> {
-  const response = await apiClient.post<{ success: boolean; email?: string; from_cache?: boolean; credits_used?: number; error?: string }>(
-    `${API_BASE}/reveal-email`,
-    {
-      person_id: personId,
-      employee_name: employeeName
-    }
-  );
-  return response.data;
+export async function revealEmail(personId: string): Promise<string> {
+  const response = await apiClient.get(`${BASE_PATH}/leads/${personId}/email`);
+  return response.data.email;
 }
 
 /**
  * Reveal phone for a person (costs 8 credits)
- * Supports both GET (with personId in URL) and POST (with person_id in body)
- * Note: Phone reveals are asynchronous - phone may be null initially, delivered via webhook
  */
-export async function revealPhone(personId: string, employeeName?: string): Promise<{ success: boolean; phone?: string | null; from_cache?: boolean; credits_used?: number; processing?: boolean; message?: string; error?: string }> {
-  const response = await apiClient.post<{ success: boolean; phone?: string | null; from_cache?: boolean; credits_used?: number; processing?: boolean; message?: string; error?: string }>(
-    `${API_BASE}/reveal-phone`,
-    {
-      person_id: personId,
-      employee_name: employeeName
-    }
-  );
-  return response.data;
+export async function revealPhone(personId: string): Promise<string> {
+  const response = await apiClient.get(`${BASE_PATH}/leads/${personId}/phone`);
+  return response.data.phone;
 }
 
 /**
  * Health check for Apollo service
  */
-export async function checkHealth(): Promise<ApolloHealthResponse> {
-  const response = await apiClient.get<{ data: ApolloHealthResponse }>(
-    `${API_BASE}/health`
-  );
-  return response.data.data;
+export async function checkHealth() {
+  const response = await apiClient.get(`${BASE_PATH}/health`);
+  return response.data;
 }
 
+/**
+ * Search employees from database cache
+ */
+export async function searchEmployeesFromDb(params: {
+  organization_locations?: string[];
+  person_titles?: string[];
+  organization_industries?: string[];
+  per_page?: number;
+  page?: number;
+}) {
+  const response = await apiClient.post(`${BASE_PATH}/search-employees-from-db`, params);
+  return response.data;
+}
+
+/**
+ * Reveal email via POST endpoint
+ */
+export async function revealEmailPost(params: {
+  person_id: string;
+  employee_name?: string;
+}) {
+  const response = await apiClient.post(`${BASE_PATH}/reveal-email`, params);
+  return response.data;
+}
+
+/**
+ * Reveal phone via POST endpoint
+ */
+export async function revealPhonePost(params: {
+  person_id: string;
+  employee_name?: string;
+}) {
+  const response = await apiClient.post(`${BASE_PATH}/reveal-phone`, params);
+  return response.data;
+}
+
+/**
+ * Get decision maker phone numbers for a list of contacts
+ * LAD Architecture: Phone reveal functionality
+ */
+export async function getDecisionMakerPhones(request: {
+  contacts: Array<{
+    id: string;
+    name: string;
+    company?: string;
+    title?: string;
+  }>;
+}) {
+  const response = await apiClient.post(`${BASE_PATH}/get-decision-maker-phones`, request);
+  return response.data;
+}
+
+/**
+ * Reveal a single phone number
+ */
+export async function revealSinglePhone(
+  contactId: string,
+  name: string,
+  company?: string,
+  title?: string
+): Promise<string | null> {
+  const response = await getDecisionMakerPhones({
+    contacts: [{ id: contactId, name, company, title }]
+  });
+
+  if (response.results && response.results.length > 0) {
+    const result = response.results[0];
+    if (result.phone) {
+      return result.phone;
+    }
+    if (result.error) {
+      throw new Error(result.error);
+    }
+  }
+
+  return null;
+}

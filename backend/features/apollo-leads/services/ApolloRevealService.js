@@ -119,23 +119,22 @@ class ApolloRevealService {
       logger.info('[Apollo Reveal] Email revealed successfully from Apollo', { credits_used: CREDIT_COSTS.EMAIL_REVEAL });
       
       // STEP 3: Update cache with real email
-      if (personId) {
-        try {
-          if (!client) client = await pool.connect();
-          
-          await client.query(`
+      // Note: personId is guaranteed to be truthy here (validated at line 93-95)
+      try {
+        if (!client) client = await pool.connect();
+        
+        await client.query(`
             UPDATE ${schema}.employees_cache
             SET employee_email = $1, updated_at = NOW()
             WHERE apollo_person_id = $2 AND tenant_id = $3
           `, [email, String(personId), tenantId]);
-          
-          logger.debug('[Apollo Reveal] Real email saved to employees_cache');
-          client.release();
-          client = null;
-        } catch (cacheError) {
-          logger.warn('[Apollo Reveal] Error caching email', { error: cacheError.message });
-          if (client) client.release();
-        }
+        
+        logger.debug('[Apollo Reveal] Real email saved to employees_cache');
+        client.release();
+        client = null;
+      } catch (cacheError) {
+        logger.warn('[Apollo Reveal] Error caching email', { error: cacheError.message });
+        if (client) client.release();
       }
       
       return { email, from_cache: false, credits_used: CREDIT_COSTS.EMAIL_REVEAL };
@@ -275,23 +274,22 @@ class ApolloRevealService {
       logger.info('[Apollo Reveal] Phone revealed successfully from Apollo (immediate response)', { credits_used: CREDIT_COSTS.PHONE_REVEAL });
       
       // STEP 3: Update cache with real phone
-      if (personId) {
-        try {
-          if (!client) client = await pool.connect();
-          
-          await client.query(`
+      // Note: personId is guaranteed to be truthy here (validated at line 224-226)
+      try {
+        if (!client) client = await pool.connect();
+        
+        await client.query(`
             UPDATE ${schema}.employees_cache
             SET employee_phone = $1, updated_at = NOW()
             WHERE apollo_person_id = $2 AND tenant_id = $3
           `, [phone, String(personId), tenantId]);
-          
-          logger.debug('[Apollo Reveal] Real phone saved to employees_cache');
-          client.release();
-          client = null;
-        } catch (cacheError) {
-          logger.warn('[Apollo Reveal] Error caching phone', { error: cacheError.message });
-          if (client) client.release();
-        }
+        
+        logger.debug('[Apollo Reveal] Real phone saved to employees_cache');
+        client.release();
+        client = null;
+      } catch (cacheError) {
+        logger.warn('[Apollo Reveal] Error caching phone', { error: cacheError.message });
+        if (client) client.release();
       }
       
       return { phone, from_cache: false, credits_used: CREDIT_COSTS.PHONE_REVEAL };
