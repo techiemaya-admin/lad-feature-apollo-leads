@@ -24,10 +24,8 @@ jobs:
 
       - name: Copy backend files
         run: |
-          # Remove old files
-          # Use rsync to sync files
+          # Sync backend files (rsync with --delete also removes old files)
           rsync -av --delete backend/features/apollo-leads/ lad-backend/features/apollo-leads/
-
       - name: Commit and push to LAD-Backend
         working-directory: lad-backend
         run: |
