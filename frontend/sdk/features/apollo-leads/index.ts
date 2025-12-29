@@ -15,33 +15,29 @@
  */
 
 // ============================================================================
-// SERVICES
+// API FUNCTIONS
 // ============================================================================
-export { apolloLeadsService, ApolloLeadsService } from './services/apolloLeadsService';
-export { 
-  getDecisionMakerPhones, 
-  getDecisionMakerPhones as getDecisionMakerPhone, // Backward compatibility alias
-  revealSinglePhone 
-} from './services/apolloPhoneService';
-export type {
-  PhoneRevealRequest,
-  PhoneRevealResponse
-} from './services/apolloPhoneService';
+export {
+  searchCompanies,
+  getCompanyDetails,
+  searchEmployees,
+  revealEmail,
+  revealPhone,
+  checkHealth,
+  searchEmployeesFromDb,
+  revealEmailPost,
+  revealPhonePost,
+  getDecisionMakerPhones,
+  revealSinglePhone
+} from './api';
 
 // ============================================================================
 // HOOKS
 // ============================================================================
 export { useApolloLeads } from './hooks';
-// Re-export from hooks.ts (LAD architecture pattern)
+// Future hooks can be added here:
 // export { useApolloSearch } from './hooks';
 // export { useApolloCredits } from './hooks';
-
-// ============================================================================
-// COMPONENTS
-// ============================================================================
-export { default as ApolloLeadsSearch } from './ApolloLeadsSearch';
-// export { ApolloCompanyCard } from './components/ApolloCompanyCard';
-// export { ApolloEmployeeList } from './components/ApolloEmployeeList';
 
 // ============================================================================
 // TYPES
@@ -83,7 +79,11 @@ export type {
   // Component Props
   ApolloLeadsSearchProps,
   ApolloCompanyCardProps,
-  ApolloEmployeeListProps
+  ApolloEmployeeListProps,
+  
+  // Phone Service Types
+  PhoneRevealRequest,
+  PhoneRevealResponse
 } from './types';
 
 // ============================================================================

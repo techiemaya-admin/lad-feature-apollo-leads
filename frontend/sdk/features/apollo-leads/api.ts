@@ -150,3 +150,45 @@ export async function revealPhonePost(params: {
   const response = await apiClient.post(`${BASE_PATH}/reveal-phone`, params);
   return response.data;
 }
+
+/**
+ * Get decision maker phone numbers for a list of contacts
+ * LAD Architecture: Phone reveal functionality
+ */
+export async function getDecisionMakerPhones(request: {
+  contacts: Array<{
+    id: string;
+    name: string;
+    company?: string;
+    title?: string;
+  }>;
+}) {
+  const response = await apiClient.post(`${BASE_PATH}/get-decision-maker-phones`, request);
+  return response.data;
+}
+
+/**
+ * Reveal a single phone number
+ */
+export async function revealSinglePhone(
+  contactId: string,
+  name: string,
+  company?: string,
+  title?: string
+): Promise<string | null> {
+  const response = await getDecisionMakerPhones({
+    contacts: [{ id: contactId, name, company, title }]
+  });
+
+  if (response.results && response.results.length > 0) {
+    const result = response.results[0];
+    if (result.phone) {
+      return result.phone;
+    }
+    if (result.error) {
+      throw new Error(result.error);
+    }
+  }
+
+  return null;
+}

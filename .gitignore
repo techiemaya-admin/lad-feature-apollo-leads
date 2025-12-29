@@ -46,7 +46,18 @@ coverage/
 
 # Local development files (not for production)
 server.js
-# Note: package.json and package-lock.json should be committed for CI/CD to work
+test-server.js
+
+# Local test scripts and temporary files (root level)
+START_*.sh
+debug-*.js
+test-*.http
+
+# Test-only package files (if created only for local testing)
+# Note: Uncomment if package.json/package-lock.json are test-only
+# package.json
+# package-lock.json
+# Note: package.json and package-lock.json should be committed for CI/CD to work if they're part of the project
 
 # Documentation files
 *.md

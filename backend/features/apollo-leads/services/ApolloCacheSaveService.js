@@ -4,17 +4,24 @@
  * LAD Architecture Compliant
  */
 
-const { pool } = require('../../../shared/database/connection');
+/**
+ * Apollo Cache Save Service
+ * LAD Architecture Compliant - Business logic only, calls repository for SQL
+ * 
+ * Handles saving Apollo results to database cache.
+ */
+
 const { getSchema } = require('../../../core/utils/schemaHelper');
 const logger = require('../../../core/utils/logger');
+const ApolloEmployeesCacheRepository = require('../repositories/ApolloEmployeesCacheRepository');
 
 /**
  * Save Apollo employees to database cache
+ * LAD Architecture: Business logic only - delegates SQL to repository
  * @param {Array} employees - Array of employee objects
  * @param {Object} req - Express request object (for tenant context)
  */
 async function saveEmployeesToCache(employees, req = null) {
-  let client;
   let savedCount = 0;
   let updatedCount = 0;
   let errorCount = 0;
@@ -27,8 +34,6 @@ async function saveEmployeesToCache(employees, req = null) {
     // LAD Architecture: Get dynamic schema (no hardcoded lad_dev)
     const schema = getSchema(req);
     
-    client = await pool.connect();
-    
     for (const emp of employees) {
       try {
         const apolloPersonId = String(emp.id || emp.person_id || '');
@@ -38,49 +43,25 @@ async function saveEmployeesToCache(employees, req = null) {
           continue;
         }
         
-        // LAD Architecture: Use dynamic schema and tenant_id from request
-        // Note: Schema variable must be used in template literal, not string interpolation in ON CONFLICT
-        const result = await client.query(`
-          INSERT INTO ${schema}.employees_cache (
-            tenant_id, apollo_person_id, employee_name, employee_title, employee_email,
-            employee_phone, employee_linkedin_url, employee_photo_url,
-            employee_headline, employee_city, employee_state, employee_country,
-            company_id, company_name, company_domain, data_source, employee_data
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-          ON CONFLICT (tenant_id, company_id, apollo_person_id) DO UPDATE SET
-            employee_name = EXCLUDED.employee_name,
-            employee_title = EXCLUDED.employee_title,
-            employee_email = COALESCE(EXCLUDED.employee_email, employees_cache.employee_email),
-            employee_phone = COALESCE(EXCLUDED.employee_phone, employees_cache.employee_phone),
-            employee_linkedin_url = COALESCE(EXCLUDED.employee_linkedin_url, employees_cache.employee_linkedin_url),
-            employee_photo_url = COALESCE(EXCLUDED.employee_photo_url, employees_cache.employee_photo_url),
-            employee_headline = COALESCE(EXCLUDED.employee_headline, employees_cache.employee_headline),
-            employee_city = COALESCE(EXCLUDED.employee_city, employees_cache.employee_city),
-            employee_state = COALESCE(EXCLUDED.employee_state, employees_cache.employee_state),
-            employee_country = COALESCE(EXCLUDED.employee_country, employees_cache.employee_country),
-            company_name = COALESCE(EXCLUDED.company_name, employees_cache.company_name),
-            company_domain = COALESCE(EXCLUDED.company_domain, employees_cache.company_domain),
-            employee_data = EXCLUDED.employee_data,
-            updated_at = NOW()
-        `, [
-          effectiveTenantId,
+        // LAD Architecture: Delegate SQL to repository
+        const result = await ApolloEmployeesCacheRepository.upsertEmployee({
           apolloPersonId,
-          emp.name || null,
-          emp.title || null,
-          emp.email || null,
-          emp.phone || null,
-          emp.linkedin_url || null,
-          emp.photo_url || null,
-          emp.headline || null,
-          emp.city || null,
-          emp.state || null,
-          emp.country || null,
-          emp.company_id || null,
-          emp.company_name || null,
-          emp.company_domain || null,
-          'apollo_io', // data_source
-          JSON.stringify(emp.employee_data || emp || {}) // employee_data is REQUIRED, ensure it's always an object
-        ]);
+          name: emp.name || null,
+          title: emp.title || null,
+          email: emp.email || null,
+          phone: emp.phone || null,
+          linkedin_url: emp.linkedin_url || null,
+          photo_url: emp.photo_url || null,
+          headline: emp.headline || null,
+          city: emp.city || null,
+          state: emp.state || null,
+          country: emp.country || null,
+          company_id: emp.company_id || null,
+          company_name: emp.company_name || null,
+          company_domain: emp.company_domain || null,
+          data_source: 'apollo_io',
+          employee_data: emp.employee_data || emp || {}
+        }, schema, effectiveTenantId);
         
         if (result.command === 'INSERT') {
           savedCount++;
@@ -114,10 +95,6 @@ async function saveEmployeesToCache(employees, req = null) {
       stack: saveError.stack
     });
     throw saveError;
-  } finally {
-    if (client) {
-      client.release();
-    }
   }
 }
 

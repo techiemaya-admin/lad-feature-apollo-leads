@@ -1,20 +1,20 @@
 /**
  * Apollo Search History Service
- * LAD Architecture Compliant - Tenant-scoped search history
+ * LAD Architecture Compliant - Business logic only, calls repository for SQL
  * 
  * Handles search history operations with proper tenant isolation.
  */
 
-const { pool } = require('../../../shared/database/connection');
 const { getSchema } = require('../../../core/utils/schemaHelper');
 const { requireTenantId } = require('../../../core/utils/tenantHelper');
 const { SEARCH_HISTORY_CONFIG } = require('../../../core/config/constants');
 const logger = require('../../../core/utils/logger');
+const ApolloSearchHistoryRepository = require('../repositories/ApolloSearchHistoryRepository');
 
 class ApolloSearchHistoryService {
   /**
    * Save search history
-   * LAD Architecture: Requires tenant context and uses dynamic schema
+   * LAD Architecture: Business logic only - delegates SQL to repository
    * 
    * @param {Object} searchData - Search data to save
    * @param {Object} req - Express request object (for tenant context)
@@ -29,19 +29,8 @@ class ApolloSearchHistoryService {
       );
       const schema = getSchema(req);
 
-      const query = `
-        INSERT INTO ${schema}.apollo_search_history 
-          (tenant_id, user_id, search_params, results_count, created_at)
-        VALUES ($1, $2, $3, $4, NOW())
-        RETURNING id
-      `;
-      
-      await pool.query(query, [
-        tenantId,
-        searchData.userId,
-        JSON.stringify(searchData.searchParams),
-        searchData.results
-      ]);
+      // LAD Architecture: Delegate SQL to repository
+      await ApolloSearchHistoryRepository.save(searchData, schema, tenantId);
       
       logger.debug('[Apollo Search History] Search history saved', {
         userId: searchData.userId,
@@ -58,7 +47,7 @@ class ApolloSearchHistoryService {
 
   /**
    * Get search history
-   * LAD Architecture: Tenant-scoped query with dynamic schema
+   * LAD Architecture: Business logic only - delegates SQL to repository
    * 
    * @param {string} userId - User ID
    * @param {Object} options - Query options (limit, page)
@@ -77,20 +66,8 @@ class ApolloSearchHistoryService {
       const tenantId = requireTenantId(null, req, 'getSearchHistory');
       const schema = getSchema(req);
       
-      const query = `
-        SELECT id, search_params, results_count, created_at
-        FROM ${schema}.apollo_search_history
-        WHERE tenant_id = $1 AND user_id = $2
-        ORDER BY created_at DESC
-        LIMIT $3 OFFSET $4
-      `;
-      
-      const result = await pool.query(query, [tenantId, userId, limit, offset]);
-      
-      return result.rows.map(row => ({
-        ...row,
-        search_params: JSON.parse(row.search_params)
-      }));
+      // LAD Architecture: Delegate SQL to repository
+      return await ApolloSearchHistoryRepository.findByUser(userId, tenantId, schema, { limit, offset });
     } catch (error) {
       logger.error('[Apollo Search History] Get search history error', { 
         error: error.message, 
@@ -102,7 +79,7 @@ class ApolloSearchHistoryService {
 
   /**
    * Delete search history
-   * LAD Architecture: Tenant-scoped deletion with dynamic schema
+   * LAD Architecture: Business logic only - delegates SQL to repository
    * 
    * @param {string} historyId - History record ID
    * @param {string} userId - User ID
@@ -114,14 +91,10 @@ class ApolloSearchHistoryService {
       const tenantId = requireTenantId(null, req, 'deleteSearchHistory');
       const schema = getSchema(req);
       
-      const query = `
-        DELETE FROM ${schema}.apollo_search_history
-        WHERE tenant_id = $1 AND id = $2 AND user_id = $3
-      `;
+      // LAD Architecture: Delegate SQL to repository
+      const deleted = await ApolloSearchHistoryRepository.delete(historyId, userId, tenantId, schema);
       
-      const result = await pool.query(query, [tenantId, historyId, userId]);
-      
-      if (result.rowCount === 0) {
+      if (!deleted) {
         throw new Error('Search history record not found or access denied');
       }
       
