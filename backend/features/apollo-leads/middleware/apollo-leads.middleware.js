@@ -3,7 +3,7 @@
  * Middleware functions for apollo-leads feature
  */
 
-const logger = require('../../../shared/utils/logger');
+const logger = require('./utils/logger');
 
 /**
  * Validate Apollo API parameters
@@ -50,8 +50,16 @@ const logApolloRequest = (req, res, next) => {
   next();
 };
 
+/**
+ * Mock middleware for standalone testing
+ */
+const requireFeature = (featureName) => (req, res, next) => next();
+const requireCredits = (credits) => (req, res, next) => next();
+
 module.exports = {
   validateApolloParams,
   validateTenantContext,
-  logApolloRequest
+  logApolloRequest,
+  requireFeature,
+  requireCredits
 };

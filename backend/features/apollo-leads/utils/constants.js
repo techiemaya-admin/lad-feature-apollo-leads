@@ -1,5 +1,5 @@
 /**
- * Mock Constants for Testing
+ * Apollo Feature Constants
  */
 
 const APOLLO_CONFIG = {

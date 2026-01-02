@@ -6,8 +6,8 @@
  * This repository contains ONLY SQL queries.
  */
 
-const { pool } = require('../../../shared/database/connection');
-const { getSchema } = require('../../../core/utils/schemaHelper');
+const { pool } = require('./utils/database');
+const { getSchema } = require('./utils/schema');
 
 class ApolloSearchHistoryRepository {
   /**

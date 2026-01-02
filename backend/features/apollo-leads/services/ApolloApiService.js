@@ -7,7 +7,7 @@
 const axios = require('axios');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
-const logger = require('../../../core/utils/logger');
+const logger = require('./utils/logger');
 
 /**
  * Helper function to call Python Apollo service

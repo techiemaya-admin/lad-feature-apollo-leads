@@ -14,7 +14,7 @@ const ApolloFormatterService = require('./ApolloFormatterService');
 const ApolloPythonService = require('./ApolloPythonService');
 const ApolloRevealService = require('./ApolloRevealService');
 const { APOLLO_CONFIG, TIMEOUT_CONFIG } = require('../models/constants');
-const logger = require('../../../core/utils/logger');
+const logger = require('./utils/logger');
 
 class ApolloLeadsService {
   constructor() {

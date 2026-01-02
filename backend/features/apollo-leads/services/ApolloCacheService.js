@@ -4,11 +4,11 @@
  * LAD Architecture Compliant
  */
 
-const { pool } = require('../../../shared/database/connection');
+const { pool } = require('./utils/database');
 const { searchEmployeesFromApollo } = require('./ApolloApiService');
 const { saveEmployeesToCache, formatApolloEmployees } = require('./ApolloCacheSaveService');
-const { getSchema } = require('../../../core/utils/schemaHelper');
-const logger = require('../../../core/utils/logger');
+const { getSchema } = require('./utils/schema');
+const logger = require('./utils/logger');
 
 /**
  * Search employees from database cache (employees_cache table)

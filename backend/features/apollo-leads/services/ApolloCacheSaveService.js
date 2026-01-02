@@ -11,8 +11,8 @@
  * Handles saving Apollo results to database cache.
  */
 
-const { getSchema } = require('../../../core/utils/schemaHelper');
-const logger = require('../../../core/utils/logger');
+const { getSchema } = require('./utils/schema');
+const logger = require('./utils/logger');
 const ApolloEmployeesCacheRepository = require('../repositories/ApolloEmployeesCacheRepository');
 
 /**
@@ -28,7 +28,7 @@ async function saveEmployeesToCache(employees, req = null) {
   
   try {
     // LAD Architecture: Require tenant context (throws error if missing in production)
-    const { requireTenantId } = require('../../../core/utils/tenantHelper');
+    const { requireTenantId } = require('./utils/schema');
     const effectiveTenantId = requireTenantId(null, req, 'saveEmployeesToCache');
     
     // LAD Architecture: Get dynamic schema (no hardcoded lad_dev)

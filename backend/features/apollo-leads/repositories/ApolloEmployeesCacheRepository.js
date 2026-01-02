@@ -6,7 +6,7 @@
  * This repository contains ONLY SQL queries.
  */
 
-const { pool } = require('../../../shared/database/connection');
+const { pool } = require('./utils/database');
 
 class ApolloEmployeesCacheRepository {
   /**

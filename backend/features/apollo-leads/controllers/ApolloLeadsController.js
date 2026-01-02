@@ -1,5 +1,5 @@
 const ApolloLeadsService = require('../services/ApolloLeadsService');
-const logger = require('../../../core/utils/logger');
+const logger = require('./utils/logger');
 
 /**
  * Helper to validate tenant context (standalone function to avoid 'this' binding issues)

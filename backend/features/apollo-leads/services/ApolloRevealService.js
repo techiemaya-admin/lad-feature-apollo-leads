@@ -6,11 +6,11 @@
  */
 
 const axios = require('axios');
-const { getSchema } = require('../../../core/utils/schemaHelper');
-const { requireTenantId } = require('../../../core/utils/tenantHelper');
+const { getSchema } = require('./utils/schema');
+const { requireTenantId } = require('./utils/schema');
 const { APOLLO_CONFIG, CACHE_CONFIG, CREDIT_COSTS } = require('../models/constants');
-const { pool } = require('../../../shared/database/connection');
-const logger = require('../../../core/utils/logger');
+const { pool } = require('./utils/database');
+const logger = require('./utils/logger');
 
 class ApolloRevealService {
   constructor(apiKey, baseURL) {

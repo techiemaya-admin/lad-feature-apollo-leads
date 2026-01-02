@@ -8,7 +8,7 @@
 
 const path = require('path');
 const { spawn, execSync } = require('child_process');
-const logger = require('../../../core/utils/logger');
+const logger = require('./utils/logger');
 
 class ApolloPythonService {
   /**

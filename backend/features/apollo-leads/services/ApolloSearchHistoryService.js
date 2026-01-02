@@ -5,10 +5,10 @@
  * Handles search history operations with proper tenant isolation.
  */
 
-const { getSchema } = require('../../../core/utils/schemaHelper');
-const { requireTenantId } = require('../../../core/utils/tenantHelper');
-const { SEARCH_HISTORY_CONFIG } = require('../../../core/config/constants');
-const logger = require('../../../core/utils/logger');
+const { getSchema } = require('./utils/schema');
+const { requireTenantId } = require('./utils/schema');
+const { SEARCH_HISTORY_CONFIG } = require('./utils/constants');
+const logger = require('./utils/logger');
 const ApolloSearchHistoryRepository = require('../repositories/ApolloSearchHistoryRepository');
 
 class ApolloSearchHistoryService {

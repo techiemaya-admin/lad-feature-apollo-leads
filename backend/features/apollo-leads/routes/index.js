@@ -54,8 +54,8 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
-const { requireFeature } = require('../../../shared/middleware/feature_guard');
-const { requireCredits } = require('../../../shared/middleware/credit_guard');
+const { requireFeature } = require('./middleware/apollo-leads.middleware');
+const { requireCredits } = require('./middleware/apollo-leads.middleware');
 const ApolloLeadsController = require(path.join(__dirname, '../controllers/ApolloLeadsController'));
 
 // Feature guard middleware - all routes require apollo-leads feature
