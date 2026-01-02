@@ -2,10 +2,10 @@
   "name": "lad-feature-apollo-leads",
   "version": "1.0.0",
   "description": "Apollo Leads feature module",
-  "main": "test-server.js",
+  "main": "backend/features/apollo-leads/manifest.js",
   "scripts": {
-    "test": "node test-server.js",
-    "start": "node test-server.js"
+    "test": "echo \"No tests specified\"",
+    "start": "node backend/features/apollo-leads/manifest.js"
   },
   "dependencies": {
     "axios": "^1.13.2",
