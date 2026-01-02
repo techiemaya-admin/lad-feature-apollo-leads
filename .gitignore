@@ -48,6 +48,15 @@ coverage/
 server.js
 test-server.js
 
+# Mock middleware for standalone testing (not for production)
+shared/middleware/credit_guard.js
+shared/middleware/feature_guard.js
+
+# Local migration/test scripts (never commit)
+fix-tenant-id.js
+migrate-*.js
+**/migrate-*.js
+
 # Local test scripts and temporary files (root level)
 START_*.sh
 debug-*.js

@@ -148,6 +148,12 @@ router.post('/reveal-phone',
 router.post('/search-employees-from-db', ApolloLeadsController.searchEmployeesFromDb);
 
 /**
+ * POST /api/apollo-leads/search-employees
+ * Search employees directly from Apollo API (real-time data)
+ */
+router.post('/search-employees', ApolloLeadsController.searchEmployees);
+
+/**
  * Feature health check
  */
 router.get('/health', async (req, res) => {

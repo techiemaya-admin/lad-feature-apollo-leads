@@ -94,8 +94,16 @@ async function searchEmployeesFromDb(searchParams, req = null) {
         ec.created_at,
         ec.employee_data
       FROM ${schema}.employees_cache ec
-      WHERE ec.is_deleted = false
+      WHERE 1=1
     `;
+    
+    // Try to add is_deleted filter if column exists
+    try {
+      dbQuery += ` AND (ec.is_deleted = false OR ec.is_deleted IS NULL)`;
+    } catch (e) {
+      // is_deleted column might not exist, continue without it
+      logger.debug('[Apollo Cache] is_deleted column might not exist, skipping filter');
+    }
     
     const queryParams = [];
     let paramIndex = 1;
@@ -177,7 +185,56 @@ async function searchEmployeesFromDb(searchParams, req = null) {
     
     logger.debug('[Apollo Cache] Executing database query');
     const queryStartTime = Date.now();
-    const dbResult = await client.query(dbQuery, queryParams);
+    
+    let dbResult;
+    try {
+      dbResult = await client.query(dbQuery, queryParams);
+    } catch (dbError) {
+      logger.warn('[Apollo Cache] Database query failed, calling Apollo API directly', { 
+        error: dbError.message,
+        code: dbError.code 
+      });
+      
+      // Release database connection
+      if (client) {
+        client.release();
+        client = null; // Prevent double release
+      }
+      
+      // Call Apollo API directly when database fails
+      try {
+        const apolloResult = await searchEmployeesFromApollo({
+          organization_locations: organization_locations,
+          person_titles: person_titles,
+          organization_industries: organization_industries,
+          per_page: per_page || 100,
+          page: page || 1
+        });
+        
+        if (apolloResult && apolloResult.success && apolloResult.employees) {
+          logger.info('[Apollo Cache] Successfully fetched from Apollo API', { 
+            count: apolloResult.employees.length 
+          });
+          return {
+            employees: apolloResult.employees,
+            totalCount: apolloResult.totalCount || apolloResult.employees.length,
+            page: page || 1,
+            per_page: per_page || 100,
+            source: 'apollo_direct'
+          };
+        } else {
+          logger.warn('[Apollo Cache] Apollo API returned no results');
+          return { employees: [], totalCount: 0, page: page || 1, per_page: per_page || 100, source: 'apollo_direct' };
+        }
+      } catch (apolloError) {
+        logger.error('[Apollo Cache] Both database and Apollo API failed', { 
+          dbError: dbError.message,
+          apolloError: apolloError.message 
+        });
+        throw new Error(`Database query failed: ${dbError.message}`);
+      }
+    }
+    
     const queryDuration = Date.now() - queryStartTime;
     
     logger.info('[Apollo Cache] Query executed', {
@@ -293,6 +350,7 @@ async function searchEmployeesFromDb(searchParams, req = null) {
       stack: error.stack
     });
     
+    // Only release if not already released
     if (client) {
       client.release();
     }

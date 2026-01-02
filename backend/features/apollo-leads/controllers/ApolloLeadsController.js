@@ -352,6 +352,29 @@ class ApolloLeadsController {
       });
     }
   }
+
+  /**
+   * Search employees directly from Apollo API
+   */
+  async searchEmployees(req, res) {
+    try {
+      logger.info('[Apollo Leads Controller] Search employees from Apollo API request received');
+      
+      // Use ApolloApiService directly for Apollo API search
+      const { searchEmployeesFromApollo } = require('../services/ApolloApiService');
+      const result = await searchEmployeesFromApollo(req.body);
+      res.json(result);
+    } catch (error) {
+      logger.error('[Apollo Leads Controller] Search employees from Apollo error', {
+        error: error.message,
+        stack: error.stack
+      });
+      res.status(error.message.includes('required') ? 400 : 500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
 }
 
 module.exports = new ApolloLeadsController();
