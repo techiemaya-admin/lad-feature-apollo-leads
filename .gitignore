@@ -62,6 +62,7 @@ test-*.http
 
 # Documentation files
 *.md
+!README.md
 
 # Test files
 **/*test*.js
@@ -70,6 +71,12 @@ test-*.http
 **/*spec*.ts
 test/
 tests/
+
+# Local utility scripts
+update-imports.js
+fix-*.js
+migrate-*.js
+**/migrate-*.js
 
 # Migration files (ignore specific ones)
 backend/migrations/002_add_is_deleted_simple.sql
