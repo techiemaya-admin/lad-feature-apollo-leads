@@ -1,0 +1,23 @@
+/**
+ * Mock Constants for Testing
+ */
+
+const APOLLO_CONFIG = {
+  DEFAULT_BASE_URL: 'https://api.apollo.io/v1',
+  API_VERSION: 'v1',
+  MAX_RESULTS_PER_PAGE: 25,
+  MAX_TOTAL_RESULTS: 1000,
+  RATE_LIMIT_PER_MINUTE: 30,
+  TIMEOUT_MS: 30000
+};
+
+const SEARCH_HISTORY_CONFIG = {
+  MAX_HISTORY_ENTRIES: 100,
+  RETENTION_DAYS: 90,
+  CACHE_TTL_HOURS: 24
+};
+
+module.exports = {
+  APOLLO_CONFIG,
+  SEARCH_HISTORY_CONFIG
+};

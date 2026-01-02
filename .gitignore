@@ -48,10 +48,6 @@ coverage/
 server.js
 test-server.js
 
-# Mock middleware for standalone testing (not for production)
-shared/middleware/credit_guard.js
-shared/middleware/feature_guard.js
-
 # Local migration/test scripts (never commit)
 fix-tenant-id.js
 migrate-*.js
@@ -83,10 +79,9 @@ backend/migrations/002_add_is_deleted_to_employees_cache_tenant.sql
 # Environment example files
 env.example
 
-# Ignore core and shared folders (match campaigns structure)
-backend/core/
-backend/shared/
-backend/migrations/
-# Note: backend/services/, backend/routes/, and backend/manifest.js are required by CI workflow
+# NOTE: backend/core/ and shared/ contain files required by apollo-leads feature
+# These are mock implementations for standalone testing but ARE needed for the code to run
+# In production deployment, these will be overridden by LAD core services
+
 # Ignore root-level sdk/ folder (duplicate), but allow frontend/sdk/
 /sdk/
