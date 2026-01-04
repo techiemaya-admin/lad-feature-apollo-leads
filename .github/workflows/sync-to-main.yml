@@ -4,10 +4,23 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      target_branch:
+        description: 'Target branch for sync'
+        required: true
+        default: 'develop'
+        type: choice
+        options:
+          - develop
+          - staging
+
+permissions:
+  contents: read
 
 jobs:
   sync-backend:
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Checkout feature repo
         uses: actions/checkout@v3
@@ -20,46 +33,89 @@ jobs:
           repository: techiemaya-admin/LAD-Backend
           token: ${{ secrets.LAD_REPO_TOKEN }}
           path: lad-backend
-          ref: develop
+          ref: ${{ inputs.target_branch || 'develop' }}
 
       - name: Copy backend files
         run: |
-          # Remove old files
-          rm -rf lad-backend/features/apollo-leads/*
+          echo "Syncing backend files with rsync (safer approach)..."
+          
+          # Ensure target directory exists
+          mkdir -p lad-backend/features/apollo-leads/
+          
+          # Sync files WITHOUT delete (safer - only adds/updates)
+          if ! rsync -av \
+            --exclude='.env*' \
+            --exclude='*.local.*' \
+            --exclude='node_modules/' \
+            --exclude='.DS_Store' \
+            --exclude='*.log' \
+            --exclude='test-*' \
+            --exclude='debug-*' \
+            backend/features/apollo-leads/ lad-backend/features/apollo-leads/; then
+            echo "❌ rsync failed!"
+            exit 1
+          fi
+          
+          echo "✅ Backend files synchronized successfully!"
 
-          # Ensure directories exist
-          mkdir -p lad-backend/features/apollo-leads/services
-          mkdir -p lad-backend/features/apollo-leads/routes
-          mkdir -p lad-backend/features/apollo-leads/controllers
-          mkdir -p lad-backend/features/apollo-leads/middleware
-          mkdir -p lad-backend/features/apollo-leads/models
-
-          # Copy new files
-          [ -d "backend/services" ] && cp backend/services/* lad-backend/features/apollo-leads/services/ || echo "No services directory"
-          [ -f "backend/routes/index.js" ] && cp backend/routes/index.js lad-backend/features/apollo-leads/routes/index.js || echo "No routes/index.js"
-          [ -d "backend/controllers" ] && cp backend/controllers/* lad-backend/features/apollo-leads/controllers/ 2>/dev/null || echo "No controllers directory"
-          [ -d "backend/middleware" ] && cp backend/middleware/* lad-backend/features/apollo-leads/middleware/ 2>/dev/null || echo "No middleware directory"
-          [ -d "backend/models" ] && cp backend/models/* lad-backend/features/apollo-leads/models/ 2>/dev/null || echo "No models directory"
-          [ -f "backend/manifest.js" ] && cp backend/manifest.js lad-backend/features/apollo-leads/ || echo "No manifest.js"
-          [ -f "backend/UPGRADE_NOTES.md" ] && cp backend/UPGRADE_NOTES.md lad-backend/features/apollo-leads/ || echo "No UPGRADE_NOTES.md"
-          [ -f "backend/README.md" ] && cp backend/README.md lad-backend/features/apollo-leads/ || echo "No README.md"
+      - name: Validate sync
+        run: |
+          echo "Validating backend sync..."
+          
+          # Check required files exist after sync
+          required_files=(
+            "lad-backend/features/apollo-leads/manifest.js"
+            "lad-backend/features/apollo-leads/services"
+            "lad-backend/features/apollo-leads/repositories"
+            "lad-backend/features/apollo-leads/constants"
+          )
+          
+          for file in "${required_files[@]}"; do
+            if [ ! -e "$file" ]; then
+              echo "❌ ERROR: Required file missing after sync: $file"
+              exit 1
+            else
+              echo "✅ Validated: $file"
+            fi
+          done
+          
+          echo "Backend validation completed successfully!"
 
       - name: Commit and push to LAD-Backend
         working-directory: lad-backend
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
+          git config user.name "LAD Feature Sync Bot"
+          git config user.email "noreply@techiemaya.com"
+          
+          # Check if there are changes
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No changes detected in backend, skipping commit"
+            exit 0
+          fi
+          
           git add features/apollo-leads/
-          git commit -m "feat(apollo-leads): auto-sync from feature repo
+          git commit -m "feat(apollo-leads): sync from feature repo
 
-          Synced from: ${{ github.sha }}
-          Repository: lad-feature-apollo-leads
-          Timestamp: $(date -u)
-          " || echo "No changes to commit"
-          git push origin develop
+          🔄 Auto-sync from lad-feature-apollo-leads
+          📦 Updated: Apollo Leads feature with LAD architecture compliance
+          🔗 Source commit: ${{ github.sha }}
+          👤 Triggered by: ${{ github.actor }}
+          🏃 Workflow run: ${{ github.run_id }}
+          📅 Timestamp: $(date -u)
+          
+          Changes include:
+          - LAD architecture compliance (repositories, validators, dtos)
+          - Webhook parameterization via environment variables
+          - Complete tenant scoping and security updates
+          "
+          
+          git push origin ${{ inputs.target_branch || 'develop' }}
+          echo "✅ Backend sync completed successfully!"
 
   sync-frontend:
     runs-on: ubuntu-latest
+    environment: production
+    needs: sync-backend
     steps:
       - name: Checkout feature repo
         uses: actions/checkout@v3
@@ -70,39 +126,92 @@ jobs:
           repository: techiemaya-admin/LAD-Frontend
           token: ${{ secrets.LAD_REPO_TOKEN }}
           path: lad-frontend
-          ref: develop
+          ref: ${{ inputs.target_branch || 'develop' }}
 
       - name: Copy frontend SDK files
         run: |
+          echo "Copying frontend SDK files..."
+          
           # Remove old SDK
           rm -rf lad-frontend/sdk/features/apollo-leads/*
 
           # Ensure directory exists
           mkdir -p lad-frontend/sdk/features/apollo-leads
 
-          # Copy new SDK
-          [ -d "frontend/sdk" ] && cp -r frontend/sdk/* lad-frontend/sdk/features/apollo-leads/ || echo "No frontend SDK"
+          # Copy SDK files correctly (exclude shared folder as it's provided by LAD core)
+          if [ -d "frontend/sdk/features/apollo-leads" ]; then
+            # Copy feature-specific SDK files only
+            cp -r frontend/sdk/features/apollo-leads/* lad-frontend/sdk/features/apollo-leads/
+            echo "✅ SDK files copied successfully"
+          else
+            echo "❌ No frontend SDK directory found"
+            exit 1
+          fi
 
-          # Copy components if exist
+          # Copy web components if they exist
           if [ -d "frontend/components" ] && [ "$(ls -A frontend/components)" ]; then
             mkdir -p lad-frontend/web/src/features/apollo-leads
             rm -rf lad-frontend/web/src/features/apollo-leads/*
             cp -r frontend/components/* lad-frontend/web/src/features/apollo-leads/
+            echo "✅ Web components copied"
+          else
+            echo "ℹ️ No web components to copy"
           fi
+
+      - name: Validate frontend sync
+        run: |
+          echo "Validating frontend sync..."
+          
+          # Check required SDK files exist
+          required_files=(
+            "lad-frontend/sdk/features/apollo-leads/api.ts"
+            "lad-frontend/sdk/features/apollo-leads/types.ts"
+            "lad-frontend/sdk/features/apollo-leads/hooks.ts"
+            "lad-frontend/sdk/features/apollo-leads/index.ts"
+          )
+          
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ ERROR: Required SDK file missing: $file"
+              exit 1
+            else
+              echo "✅ Validated: $file"
+            fi
+          done
+          
+          echo "Frontend validation completed successfully!"
 
       - name: Commit and push to LAD-Frontend
         working-directory: lad-frontend
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
+          git config user.name "LAD Feature Sync Bot"
+          git config user.email "noreply@techiemaya.com"
+          
+          # Check if there are changes
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No changes detected in frontend, skipping commit"
+            exit 0
+          fi
+          
           git add sdk/features/apollo-leads/
           if [ -d "web/src/features/apollo-leads" ]; then
             git add web/src/features/apollo-leads/
           fi
-          git commit -m "feat(apollo-leads): auto-sync SDK from feature repo
+          
+          git commit -m "feat(apollo-leads): sync SDK from feature repo
 
-          Synced from: ${{ github.sha }}
-          Repository: lad-feature-apollo-leads
-          Timestamp: $(date -u)
-          " || echo "No changes to commit"
-          git push origin develop
+          🔄 Auto-sync SDK from lad-feature-apollo-leads
+          📦 Updated: Apollo Leads SDK with LAD architecture compliance
+          🔗 Source commit: ${{ github.sha }}
+          👤 Triggered by: ${{ github.actor }}
+          🏃 Workflow run: ${{ github.run_id }}
+          📅 Timestamp: $(date -u)
+          
+          Changes include:
+          - Updated SDK to use shared apiClient (no direct fetch)
+          - TypeScript compliance and proper error handling
+          - LAD architecture compliance
+          "
+          
+          git push origin ${{ inputs.target_branch || 'develop' }}
+          echo "✅ Frontend sync completed successfully!"
