@@ -12,7 +12,11 @@ const APOLLO_CONFIG = {
     ORGANIZATION_BY_ID: '/organizations',
     PEOPLE_SEARCH: '/mixed_people/search',
     PEOPLE_BULK_MATCH: '/people/bulk_match',
-    MIXED_PEOPLE_SEARCH: '/mixed_people/search'
+    MIXED_PEOPLE_SEARCH: '/mixed_people/search',
+    PEOPLE_MATCH: '/people/match',
+    PEOPLE_ENRICHMENT: '/people/match',
+    BULK_PEOPLE_ENRICHMENT: '/people/bulk_match',
+    ORGANIZATION_ENRICHMENT: '/organizations/enrich'
   }
 };
 

@@ -48,6 +48,17 @@ coverage/
 server.js
 test-server.js
 
+# Testing infrastructure (local development only)
+testing/
+testing/**
+*.test-results.*
+test-output/
+
+# Testing scripts and UI (local only)
+testing/
+test-ui/
+**/testing-*
+
 # Local test scripts and temporary files (root level)
 START_*.sh
 debug-*.js
@@ -81,3 +92,5 @@ backend/migrations/
 # Note: backend/services/, backend/routes/, and backend/manifest.js are required by CI workflow
 # Ignore root-level sdk/ folder (duplicate), but allow frontend/sdk/
 /sdk/
+# Ignore frontend shared folder (provided by LAD core)
+frontend/sdk/shared/
