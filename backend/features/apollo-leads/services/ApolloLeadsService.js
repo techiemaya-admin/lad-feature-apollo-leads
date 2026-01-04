@@ -13,7 +13,7 @@ const axios = require('axios');
 const ApolloFormatterService = require('./ApolloFormatterService');
 const ApolloPythonService = require('./ApolloPythonService');
 const ApolloRevealService = require('./ApolloRevealService');
-const { APOLLO_CONFIG, TIMEOUT_CONFIG } = require('../../../core/config/constants');
+const { APOLLO_CONFIG, TIMEOUT_CONFIG } = require('../constants/constants');
 const logger = require('../../../core/utils/logger');
 
 class ApolloLeadsService {
