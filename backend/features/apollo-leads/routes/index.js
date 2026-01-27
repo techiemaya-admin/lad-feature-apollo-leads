@@ -57,6 +57,7 @@ const path = require('path');
 const { requireFeature } = require('../../../shared/middleware/feature_guard');
 const { requireCredits } = require('../../../shared/middleware/credit_guard');
 const ApolloLeadsController = require(path.join(__dirname, '../controllers/ApolloLeadsController'));
+const unipileRoutes = require('./unipile');
 
 // Feature guard middleware - all routes require apollo-leads feature
 router.use(requireFeature('apollo-leads'));
@@ -176,5 +177,8 @@ router.get('/health', async (req, res) => {
     });
   }
 });
+
+// Mount Unipile search routes
+router.use('/unipile', unipileRoutes);
 
 module.exports = router;
