@@ -197,17 +197,35 @@ class ApolloEmployeesCacheRepository {
   /**
    * Find employee by person ID and tenant
    * LAD Architecture: SQL only, tenant-scoped query
+   * If tenantId is null, searches across all tenants (for webhook lookups)
    */
   async findByPersonId(personId, tenantId, schema) {
-    const query = `
-      SELECT employee_email, employee_name, employee_phone
-      FROM ${schema}.employees_cache
-      WHERE apollo_person_id = $1 AND tenant_id = $2
-        AND (employee_email IS NOT NULL AND employee_email != '' AND employee_phone IS NOT NULL AND employee_phone != '')
-      LIMIT 1
-    `;
+    const schemaSafe = schema || 'lad_dev';
     
-    const result = await pool.query(query, [String(personId), tenantId]);
+    let query;
+    let params;
+    
+    if (tenantId) {
+      // Normal lookup with tenant scope
+      query = `
+        SELECT *
+        FROM ${schemaSafe}.employees_cache
+        WHERE apollo_person_id = $1 AND tenant_id = $2
+        LIMIT 1
+      `;
+      params = [String(personId), tenantId];
+    } else {
+      // Webhook lookup - no tenant scope
+      query = `
+        SELECT *
+        FROM ${schemaSafe}.employees_cache
+        WHERE apollo_person_id = $1
+        LIMIT 1
+      `;
+      params = [String(personId)];
+    }
+    
+    const result = await pool.query(query, params);
     return result.rows[0] || null;
   }
 
