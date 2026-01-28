@@ -64,6 +64,7 @@ test-ui/
 START_*.sh
 debug-*.js
 test-*.http
+
 # Note: package.json and package-lock.json should be committed for CI/CD to work
 
 # Documentation files
