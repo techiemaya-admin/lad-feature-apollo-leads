@@ -5,7 +5,8 @@ const logger = require('../../../core/utils/logger');
  * Helper to validate tenant context (standalone function to avoid 'this' binding issues)
  */
 function validateTenant(req) {
-  const tenantId = req.user?.tenant_id || req.tenant?.id || req.headers?.['x-tenant-id'];
+  // Support both snake_case (tenant_id) and camelCase (tenantId) field names
+  const tenantId = req.user?.tenant_id || req.user?.tenantId || req.tenant?.id || req.headers?.['x-tenant-id'];
   if (!tenantId && process.env.NODE_ENV === 'production') {
     throw new Error('Tenant context required');
   }
@@ -318,16 +319,14 @@ class ApolloLeadsController {
     try {
       // LAD Architecture: Validate tenant context
       // Support both authenticated requests and internal service calls via header
-      // Check both camelCase and snake_case for tenantId
-      const tenantId = req.user?.tenantId || req.user?.tenant_id || req.user?.organizationId || req.tenant?.id || req.headers['x-tenant-id'];
+      const tenantId = req.user?.tenant_id || req.user?.tenantId || req.tenant?.id || req.headers['x-tenant-id'];
       
       if (!tenantId && process.env.NODE_ENV === 'production') {
         logger.warn('[Apollo Leads Controller] Missing tenant context', {
           hasUser: !!req.user,
           hasTenant: !!req.tenant,
           hasHeader: !!req.headers['x-tenant-id'],
-          headers: Object.keys(req.headers),
-          userKeys: req.user ? Object.keys(req.user) : []
+          headers: Object.keys(req.headers)
         });
         return res.status(400).json({
           success: false,
